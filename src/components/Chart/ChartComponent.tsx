@@ -14,7 +14,8 @@ import IndicatorSettingsDialog from '../IndicatorSettings/IndicatorSettingsDialo
 import { getIndicatorConfig } from '../IndicatorSettings/indicatorConfigs';
 import { getKlines, getHistoricalKlines, subscribeToTicker, saveDrawings, loadDrawings } from '../../services/openalgo';
 import { combineMultiLegOHLC } from '../../services/optionChain';
-import { getAccurateISTTimestamp, syncTimeWithAPI, shouldResync } from '../../services/timeService';
+import { getAccurateISTTimestamp, getAccurateUTCTimestamp, syncTimeWithAPI, shouldResync } from '../../services/timeService';
+import { subscribeToConnectionStatus, ConnectionState } from '../../services/connectionStatus'; // TSK-CS-041
 import { formatCurrency } from '../../utils/shared/formatters';
 import {
     calculateSMA,
@@ -40,6 +41,7 @@ import { createRiskCalculatorPrimitive, removeRiskCalculatorPrimitive } from '..
 import { TPOProfilePrimitive } from '../../plugins/tpo-profile/TPOProfilePrimitive';
 import { intervalToSeconds } from '../../utils/timeframes';
 import { logger } from '../../utils/logger.js';
+import { getUnderlyingAlias, getSignalIndex, isSameSymbol } from '../../utils/symbolNormalization'; // TSK-CS-013/017
 
 import { LineToolManager } from '../../plugins/line-tools/line-tool-manager';
 import { PriceScaleTimer } from '../../plugins/line-tools/tools/price-scale-timer';
@@ -54,12 +56,14 @@ import RiskCalculatorPanel from '../RiskCalculatorPanel/RiskCalculatorPanel';
 import { useChartResize } from '../../hooks/useChartResize';
 import { useChartDrawings } from '../../hooks/useChartDrawings';
 import { useChartAlerts } from '../../hooks/useChartAlerts';
+import { useChartSignals } from '../../hooks/useChartSignals';
 import { getChartTheme, getThemeType } from '../../utils/chartTheme';
 import { TOOL_MAP, hexToRgba, areSymbolsEquivalent, addFutureWhitespacePoints, formatTimeDiff } from './utils/chartHelpers';
 import { createSeries, transformData } from './utils/seriesFactories';
 import { createIndicatorSeries } from './utils/indicatorCreators';
 import { updateIndicatorSeries } from './utils/indicatorUpdaters';
 import { cleanupIndicators } from './utils/indicatorCleanup';
+import TradeVisualizer from './utils/TradeVisualizer';
 import {
     DEFAULT_CANDLE_WINDOW,
     DEFAULT_RIGHT_OFFSET,
@@ -113,6 +117,8 @@ interface ChartComponentProps {
     onOpenTradingPanel?: (action?: string, price?: number, orderType?: string, isModal?: boolean) => void;
     onIndicatorMoveUp?: (id: string) => void;
     onOpenIndicatorAlert?: (indicatorId?: string) => void;
+    /** TSK-CS-012: Unique chart identity for per-chart drawings persistence */
+    chartId?: string;
 }
 
 // Helper to normalize time for comparison (handles both UNIX seconds and Date objects)
@@ -133,7 +139,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
     exchange = 'NSE',
     interval,
     chartType,
-    indicators,
+    indicators = [],
     activeTool,
     onToolUsed,
     isLogScale,
@@ -165,6 +171,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
     onOpenTradingPanel, // Callback to open trading panel
     onIndicatorMoveUp, // New prop for moving indicators
     onOpenIndicatorAlert, // Callback to open indicator alert dialog
+    chartId, // TSK-CS-012: unique chart identity for drawings
 }, ref) => {
     // Get authentication status
     const { isAuthenticated } = useUser();
@@ -182,6 +189,9 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
 
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const [isLoading, setIsLoading] = useState(true);
+    // TSK-CS-041: Track live feed (WS) separately from historical data load
+    // 'connected' | 'disconnected' | 'reconnecting'
+    const [liveFeedStatus, setLiveFeedStatus] = useState<string>('connecting');
     const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, price: null as number | null, orderId: null as string | null });
     const [isVerticalCursorLocked, setIsVerticalCursorLocked] = useState(false);
     const [priceScaleMenu, setPriceScaleMenu] = useState({ visible: false, x: 0, y: 0, price: null });
@@ -205,7 +215,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
     useChartResize(chartContainerRef, chartInstance);
 
     const [lineToolManager, setLineToolManager] = useState(null);
-    useChartDrawings(lineToolManager, symbol, exchange, interval, onDrawingsSync);
+    useChartDrawings(lineToolManager, symbol, exchange, interval, onDrawingsSync, chartId);
     useChartAlerts(lineToolManager, symbol, exchange);
 
     // Store onOHLCDataUpdate in a ref so it's accessible in WebSocket callbacks
@@ -381,7 +391,10 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
     const comparisonSeriesRefs = useRef(new Map());
     const comparisonPanesRef = useRef(new Map()); // Track panes for 'newPane' comparison mode
     const visualTradingRef = useRef(null);
+    const tradeVisualizerRef = useRef<TradeVisualizer | null>(null);
+    const tradeMarkersRef = useRef([]); // Shared markers registry to prevent indicator conflicts
     const [error, setError] = useState(null);
+    const [noDataMessage, setNoDataMessage] = useState<string | null>(null); // TSK-CS-043: Option no-history notice
 
     // Pane context menu hook
     const {
@@ -423,6 +436,20 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
         return () => {
             mountedRef.current = false;
         };
+    }, []);
+
+    // TSK-CS-041: Subscribe to WS connection status — drives live feed banner only.
+    // Historical candles are unaffected; this is purely a UI indicator.
+    useEffect(() => {
+        return subscribeToConnectionStatus((status) => {
+            if (status === ConnectionState.CONNECTED) {
+                setLiveFeedStatus('connected');
+            } else if (status === ConnectionState.RECONNECTING) {
+                setLiveFeedStatus('reconnecting');
+            } else if (status === ConnectionState.DISCONNECTED) {
+                setLiveFeedStatus('disconnected');
+            }
+        });
     }, []);
 
     const [isPlaying, setIsPlaying] = useState(false);
@@ -1763,8 +1790,9 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
         if (!series) return;
 
         // Filter orders and positions for current symbol
-        const relevantOrders = orders.filter(o => areSymbolsEquivalent(o.symbol, symbol));
-        const relevantPositions = positions.filter(p => areSymbolsEquivalent(p.symbol, symbol));
+        // TSK-CS-017: use isSameSymbol (alias-aware) instead of simple string match
+        const relevantOrders = orders.filter(o => isSameSymbol(o.symbol, symbol));
+        const relevantPositions = positions.filter(p => isSameSymbol(p.symbol, symbol));
 
         visualTradingRef.current = new VisualTrading({
             orders: relevantOrders,
@@ -1809,6 +1837,24 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
                 textColor: textColor,
                 background: { color: backgroundColor },
                 attributionLogo: false,
+            },
+            localization: {
+                // Force IST for display labels regardless of browser timezone
+                timeFormatter: (timestamp: number) => {
+                    const date = new Date(timestamp * 1000);
+                    return new Intl.DateTimeFormat('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    }).format(date);
+                },
+                priceFormatter: (price: number) => {
+                    if (price > 1000) return price.toFixed(2);
+                    if (price > 100) return price.toFixed(2);
+                    return price.toFixed(4);
+                }
             },
             grid: {
                 vertLines: {
@@ -1916,7 +1962,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
                 // Calculate date range for older data
                 // Go back further based on interval type
                 const oldestTime = oldestLoadedTimeRef.current;
-                const oldestDate = new Date((oldestTime - IST_OFFSET_SECONDS) * 1000);
+                const oldestDate = new Date(oldestTime * 1000);
 
                 // End date is 1 day before oldest loaded (to avoid overlap)
                 const endDate = new Date(oldestDate);
@@ -2236,6 +2282,11 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
                         mainSeriesRef.current.detachPrimitive(visualTradingRef.current);
                         visualTradingRef.current = null;
                     }
+                    // Dispose trade visualizer price lines
+                    if (tradeVisualizerRef.current) {
+                        tradeVisualizerRef.current.dispose();
+                        tradeVisualizerRef.current = null;
+                    }
                     if (seriesMarkersRef.current) {
                         mainSeriesRef.current.detachPrimitive(seriesMarkersRef.current);
                         seriesMarkersRef.current = null;
@@ -2432,10 +2483,19 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
             abortControllerRef.current = null;
         }
 
+        // TSK-CS-042: Immediately reset OHLC header, indicator values, and loading state
+        // on symbol change — synchronously, before loadData() is even called.
+        // Previously these ran inside the async loadData() which caused stale values to
+        // linger on screen for the full REST round-trip time (~300–800 ms).
+        setIsLoading(true);
+        setOhlcData(null);
+        setIndicatorValues({});
+        setError(null); // TSK-CS-043: Clear any stale error from previous symbol immediately
+        setNoDataMessage(null); // TSK-CS-043: Clear no-data notice from previous option symbol
+
         const loadData = async () => {
             isActuallyLoadingRef.current = true;
             chartReadyRef.current = false; // Reset chart ready state when loading new data
-            setIsLoading(true);
 
             try {
                 let data;
@@ -2468,6 +2528,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
 
                 if (Array.isArray(data) && data.length > 0 && mainSeriesRef.current) {
                     setError(null); // Clear any previous errors
+                    setNoDataMessage(null); // TSK-CS-043: Clear option no-data notice
                     dataRef.current = data;
 
                     // Share OHLC data with GlobalAlertMonitor
@@ -2562,8 +2623,8 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
                             const lastCandleTime = currentData[lastIndex].time;
 
                             if (shouldResync()) syncTimeWithAPI();
-                            const currentISTTime = getAccurateISTTimestamp();
-                            const currentCandleTime = Math.floor(currentISTTime / intervalSeconds) * intervalSeconds;
+                            const currentUTCTime = getAccurateUTCTimestamp();
+                            const currentCandleTime = Math.floor(currentUTCTime / intervalSeconds) * intervalSeconds;
 
                             // Robust time comparison using helper
                             const lastTimeVal = getTimeValue(lastCandleTime);
@@ -2662,8 +2723,8 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
                             if (shouldResync()) {
                                 syncTimeWithAPI();
                             }
-                            const currentISTTime = getAccurateISTTimestamp();
-                            const currentCandleTime = Math.floor(currentISTTime / intervalSeconds) * intervalSeconds;
+                            const currentUTCTime = getAccurateUTCTimestamp();
+                            const currentCandleTime = Math.floor(currentUTCTime / intervalSeconds) * intervalSeconds;
 
                             // Check if we need a new candle (current time is in a new interval period)
                             const needNewCandle = currentCandleTime > lastCandleTime;
@@ -2752,10 +2813,27 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
                         });
                     }
                 } else {
-                    dataRef.current = [];
-                    mainSeriesRef.current?.setData([]);
+                    // TSK-CS-041: Do NOT call setData([]) here.
+                    // If REST returns empty (market closed, symbol not found, WS down),
+                    // keep any existing historical candles visible rather than blanking the chart.
+                    // dataRef.current is intentionally NOT cleared so scroll-back still works.
                     isActuallyLoadingRef.current = false;
                     setIsLoading(false);
+
+                    // TSK-CS-043: Show a notice when no historical data is returned.
+                    // For option symbols: broker may not provide history for this strike.
+                    // For all symbols: data-hub may be down or market data unavailable.
+                    const looksLikeOption = /\d{2}(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\d{4,6}(CE|PE)$/i.test(symbol);
+                    if (looksLikeOption) {
+                        setNoDataMessage(`No historical candles for ${symbol}. Chart will build from live ticks when market opens.`);
+                    } else {
+                        // For regular symbols: clear any stale canvas by setting data to empty
+                        // and show a message. This avoids showing stale candles from a previous symbol.
+                        if (mainSeriesRef.current) {
+                            mainSeriesRef.current.setData([]);
+                        }
+                        setNoDataMessage(`No data for ${symbol}. Check that data-hub is running and the broker is connected.`);
+                    }
                 }
             } catch (error) {
                 if (error.name === 'AbortError') {
@@ -3012,7 +3090,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
 
     // Callback for when user drags risk calculator price lines
     const handleRiskCalculatorDrag = useCallback((lineType, newPrice) => {
-        const riskCalcInd = indicators.find(i => i.type === 'riskCalculator');
+        const riskCalcInd = (indicators || []).find(i => i.type === 'riskCalculator');
         if (!riskCalcInd) return;
 
         // ALWAYS preserve the current targetPrice to prevent recalculation
@@ -3465,7 +3543,12 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
         // This ensures markers from all indicators (ANN Strategy, Range Breakout, etc.) are displayed together
         if (mainSeriesRef.current) {
             try {
-                // Sort markers by time to ensure proper display order
+                // Add trade markers from the shared registry (Phase 5: Unified Marker Pipeline)
+                if (tradeMarkersRef.current && tradeMarkersRef.current.length > 0) {
+                    allMarkers.push(...tradeMarkersRef.current);
+                }
+
+                // Sort ALL markers by time to ensure proper display order
                 allMarkers.sort((a, b) => a.time - b.time);
 
                 // In lightweight-charts v5, markers are handled via createSeriesMarkers
@@ -3490,8 +3573,9 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
         const currentSym = symbolRef.current || symbol; // prefer Ref but fallback to prop
 
         // Filter orders/positions for current symbol using consistent helper
-        const relevantOrders = (orders || []).filter(o => areSymbolsEquivalent(o.symbol, currentSym));
-        const relevantPositions = (positions || []).filter(p => areSymbolsEquivalent(p.symbol, currentSym));
+        // TSK-CS-017: use isSameSymbol (alias-aware) instead of simple string match
+        const relevantOrders = (orders || []).filter(o => isSameSymbol(o.symbol, currentSym));
+        const relevantPositions = (positions || []).filter(p => isSameSymbol(p.symbol, currentSym));
 
         if (process.env.NODE_ENV === 'development') {
             logger.debug('[VisualTrading] Sync:', {
@@ -3521,6 +3605,45 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
     // --- VISUAL TRADING EVENT LISTENERS ---
     // NOTE: VisualTrading handles its own mouse events internally via attached() method.
     // No need for manual event forwarding here.
+
+    // --- TRADE SIGNAL VISUALIZATION (useChartSignals + TradeVisualizer) ---
+    // Renders trade entry/exit markers and SL/Target price lines from strategy signals.
+    const { getSignalsForIndex } = useChartSignals();
+
+    useEffect(() => {
+        if (!mainSeriesRef.current) return;
+
+        // TSK-CS-013/039: Use getSignalIndex so option chart symbols (e.g. NIFTY26APR24000CE)
+        // resolve to their underlying alias (NIFTY) for signal lookup.
+        const currentSym = getSignalIndex(symbolRef.current || symbol || '').toUpperCase();
+
+        const signals = getSignalsForIndex(currentSym);
+
+        // Lazy-create TradeVisualizer
+        if (!tradeVisualizerRef.current) {
+            tradeVisualizerRef.current = new TradeVisualizer(mainSeriesRef.current);
+        }
+
+        // Update price lines (SL/Target) for active trades
+        tradeVisualizerRef.current.updateFromSignals(signals);
+
+        // TSK-CS-016: Update trade markers registry — dedup by time+text to suppress
+        // duplicates that can appear when hydration and live WS both emit same marker.
+        const seen = new Set<string>();
+        tradeMarkersRef.current = signals
+            .map(s => ({ time: s.time, position: s.position, color: s.color, shape: s.shape, text: s.text }))
+            .filter(m => {
+                const key = `${m.time}-${m.text}-${m.shape}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+
+        // Trigger an indicator refresh to sync the new markers
+        if (dataRef.current && dataRef.current.length > 0) {
+            updateIndicators(dataRef.current, indicatorsRef.current);
+        }
+    }, [symbol, getSignalsForIndex, updateIndicators]);
 
     // ========== OI LINES EFFECT (Max Call OI, Max Put OI, Max Pain) ==========
     useEffect(() => {
@@ -4703,7 +4826,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
 
     // Create stable hash of TPO settings for dependency tracking
     const tpoSettingsHash = useMemo(() => {
-        const tpoIndicators = (indicators || []).filter(ind => ind.type === 'tpo');
+        const tpoIndicators = Array.isArray(indicators) ? indicators.filter(ind => ind.type === 'tpo') : [];
         if (tpoIndicators.length === 0) return null;
 
         const tpoId = tpoIndicators[0].id;
@@ -4722,7 +4845,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
     useEffect(() => {
         if (!chartRef.current || !mainSeriesRef.current || !dataRef.current) return;
 
-        const tpoIndicators = (indicators || []).filter(ind => ind.type === 'tpo');
+        const tpoIndicators = Array.isArray(indicators) ? indicators.filter(ind => ind.type === 'tpo') : [];
 
         // ALWAYS remove old TPO primitive first (fixes visibility toggle issue)
         if (tpoProfileRef.current && mainSeriesRef.current) {
@@ -4894,6 +5017,30 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
             />
             {isLoading && isActuallyLoadingRef.current && <div className={styles.loadingOverlay}><div className={styles.spinner}></div><div>Loading...</div></div>}
 
+            {/* TSK-CS-041: Live feed status banner — shown only when WS is not connected */}
+            {/* Historical candles stay visible; this is purely informational */}
+            {!isLoading && (liveFeedStatus === 'disconnected' || liveFeedStatus === 'reconnecting') && (
+                <div style={{
+                    position: 'absolute',
+                    top: 4,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 20,
+                    background: liveFeedStatus === 'reconnecting' ? 'rgba(255, 160, 0, 0.92)' : 'rgba(80, 80, 80, 0.92)',
+                    color: '#fff',
+                    fontSize: 11,
+                    padding: '3px 10px',
+                    borderRadius: 4,
+                    pointerEvents: 'none',
+                    whiteSpace: 'nowrap',
+                    letterSpacing: 0.2,
+                }}>
+                    {liveFeedStatus === 'reconnecting'
+                        ? 'Reconnecting live feed...'
+                        : 'Live feed disconnected — showing historical candles'}
+                </div>
+            )}
+
             {error && (
                 <div className={styles.loadingOverlay}>
                     <div style={{ color: '#F23645', marginBottom: '10px', textAlign: 'center' }}>
@@ -4915,6 +5062,31 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
                     >
                         Reload Page
                     </button>
+                </div>
+            )}
+
+            {noDataMessage && !error && (
+                <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    background: 'rgba(30,30,46,0.92)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: '8px',
+                    padding: '18px 24px',
+                    textAlign: 'center',
+                    zIndex: 20,
+                    pointerEvents: 'none',
+                    maxWidth: '340px',
+                }}>
+                    <div style={{ fontSize: '20px', marginBottom: '8px' }}>&#128202;</div>
+                    <div style={{ color: '#e0e0e0', fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}>
+                        No Historical Candles
+                    </div>
+                    <div style={{ color: '#aaa', fontSize: '11px', lineHeight: 1.5 }}>
+                        {noDataMessage}
+                    </div>
                 </div>
             )}
 
@@ -5045,9 +5217,9 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
                                 key: input.name,
                                 label: input.title || input.name,
                                 type: input.type === 'int' || input.type === 'float' ? 'number' :
-                                      input.type === 'bool' ? 'boolean' :
-                                      input.type === 'color' ? 'color' :
-                                      input.type === 'string' || input.type === 'source' ? 'select' : 'text',
+                                    input.type === 'bool' ? 'boolean' :
+                                        input.type === 'color' ? 'color' :
+                                            input.type === 'string' || input.type === 'source' ? 'select' : 'text',
                                 default: input.default,
                                 min: input.minval,
                                 max: input.maxval,
@@ -5286,17 +5458,14 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
                         onUpdateSettings={(updates) => {
                             // Update indicator settings when values change in panel
                             if (onIndicatorSettings && riskCalcInd.id) {
-                                onIndicatorSettings(riskCalcInd.id, updates);
+                                onIndicatorSettings(riskCalcInd.id, { ...riskCalcInd, ...updates });
                             }
                         }}
                         ltp={currentLTP}
-                        draggable={true}
                     />
                 );
             })()}
-
-        </div >
-
+        </div>
     );
 });
 

@@ -219,15 +219,19 @@ export const getKlines = async (
     const data = (await response.json()) as HistoryApiResponse;
     logger.debug('[OpenAlgo] History response:', data);
 
-    // Transform OpenAlgo response to lightweight-charts format
+    // Transform OpenAlgo/data-hub response to lightweight-charts format
+    // NOTE: data-hub /api/v1/history returns `time` already as UTC unix seconds.
+    // Do NOT add IST_OFFSET_SECONDS here — that would shift candles 5.5h into the future.
     if (data && data.data && Array.isArray(data.data)) {
       const candles: Candle[] = data.data
         .map((d) => {
           let time: number;
           if (typeof d.timestamp === 'number') {
-            time = d.timestamp + IST_OFFSET_SECONDS;
+            // data-hub returns pre-computed unix seconds — use as-is
+            time = d.timestamp;
           } else if (d.date || d.datetime) {
-            time = new Date(d.date || d.datetime || 0).getTime() / 1000 + IST_OFFSET_SECONDS;
+            // Fallback for raw ISO string (should not happen with current data-hub)
+            time = new Date(d.date || d.datetime || 0).getTime() / 1000;
           } else {
             time = 0;
           }
@@ -328,14 +332,15 @@ export const getHistoricalKlines = async (
     const data = (await response.json()) as HistoryApiResponse;
     logger.debug('[OpenAlgo] Historical response:', data);
 
+    // Same fix as getKlines: data-hub returns UTC unix seconds, no IST offset needed
     if (data && data.data && Array.isArray(data.data)) {
       const candles: Candle[] = data.data
         .map((d) => {
           let time: number;
           if (typeof d.timestamp === 'number') {
-            time = d.timestamp + IST_OFFSET_SECONDS;
+            time = d.timestamp; // Already UTC unix seconds from data-hub
           } else if (d.date || d.datetime) {
-            time = new Date(d.date || d.datetime || 0).getTime() / 1000 + IST_OFFSET_SECONDS;
+            time = new Date(d.date || d.datetime || 0).getTime() / 1000;
           } else {
             time = 0;
           }

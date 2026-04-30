@@ -6,8 +6,10 @@
 import { getString, STORAGE_KEYS } from '../storageService';
 import logger from '@/utils/logger';
 
-const DEFAULT_HOST = 'http://127.0.0.1:5000';
-const DEFAULT_WS_HOST = '127.0.0.1:8765';
+// Pratham Dhan Data Hub — serves all chart data at port 8000
+const DEFAULT_HOST = 'http://127.0.0.1:8000';
+// WebSocket served at same port as HTTP
+const DEFAULT_WS_HOST = '127.0.0.1:8000';
 
 /**
  * Get Host URL from localStorage settings or use default
@@ -24,6 +26,9 @@ export const shouldUseProxy = (): boolean => {
   const hostUrl = getHostUrl();
   const isDefaultHost =
     hostUrl === DEFAULT_HOST ||
+    hostUrl === 'http://localhost:8000' ||
+    hostUrl === 'http://127.0.0.1:8000' ||
+    // Legacy OpenAlgo defaults
     hostUrl === 'http://localhost:5000' ||
     hostUrl === 'http://127.0.0.1:5000';
   const isLocalDev =
@@ -62,6 +67,9 @@ export const getWebSocketUrl = (): string => {
 
   const isDefaultWsHost =
     wsHost === DEFAULT_WS_HOST ||
+    wsHost === '127.0.0.1:8000' ||
+    wsHost === 'localhost:8000' ||
+    // Legacy OpenAlgo defaults
     wsHost === '127.0.0.1:8765' ||
     wsHost === 'localhost:8765';
   const isLocalDev =
@@ -85,27 +93,38 @@ export const getWebSocketUrl = (): string => {
 };
 
 /**
- * Check if user is authenticated with OpenAlgo
- * OpenAlgo stores API key in localStorage after login
+ * Check if user is authenticated.
+ * Pratham Dhan Chart Studio uses data-hub (port 8000) directly — no OpenAlgo API key required.
+ * We auto-inject a placeholder key so SharedWebSocket and other services don't bail early.
  */
 export const checkAuth = async (): Promise<boolean> => {
   try {
+    // Auto-inject a placeholder API key if none is set.
+    // data-hub does not validate API keys — it accepts all requests.
     const apiKey = getString(STORAGE_KEYS.OA_API_KEY, '');
     if (!apiKey || apiKey.trim() === '') {
-      return false;
+      // Set a placeholder key so all service calls proceed normally
+      try {
+        localStorage.setItem(STORAGE_KEYS.OA_API_KEY, 'pratham-dhan-direct');
+        logger.info('[ApiConfig] Auto-set placeholder API key for Pratham Dhan Data Hub');
+      } catch (e) {
+        logger.warn('[ApiConfig] Could not set API key in localStorage:', e);
+      }
     }
+    // Always authenticated — Pratham Dhan uses direct Zerodha/data-hub integration
     return true;
   } catch (error) {
     logger.error('[ApiConfig] Auth check failed:', error);
-    return false;
+    return true; // Still allow rendering even if localStorage check fails
   }
 };
 
 /**
- * Get API key from localStorage (set by OpenAlgo after login)
+ * Get API key from localStorage.
+ * Returns placeholder key for Pratham Dhan's data-hub which doesn't validate keys.
  */
 export const getApiKey = (): string => {
-  return getString(STORAGE_KEYS.OA_API_KEY, '');
+  return getString(STORAGE_KEYS.OA_API_KEY, 'pratham-dhan-direct');
 };
 
 /**

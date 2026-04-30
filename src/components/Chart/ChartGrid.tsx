@@ -56,7 +56,7 @@ export interface ChartGridProps {
     onMaximizeChart?: (chartId: string) => void;
     chartRefs: MutableRefObject<Record<string, ChartRef | null>>;
     onAlertsSync?: (chartId: string, symbol: string, exchange: string, alerts: Alert[]) => void;
-    onDrawingsSync?: (drawings: unknown[]) => void;
+    onDrawingsSync?: (chartId: string, drawings: unknown[]) => void;
     onAlertTriggered?: (chartId: string, symbol: string, exchange: string, event: AlertEvent) => void;
     onReplayModeChange?: (chartId: string, isActive: boolean) => void;
     onOHLCDataUpdate?: (data: unknown) => void;
@@ -110,11 +110,12 @@ const ChartGrid: React.FC<ChartGridProps> = ({
                                 chartRefs.current[chart.id] = el;
                             }
                         }}
+                        chartId={chart.id}
                         symbol={chart.symbol}
                         exchange={chart.exchange || 'NSE'}
                         interval={chart.interval}
                         onAlertsSync={onAlertsSync ? (alerts: Alert[]) => onAlertsSync(chart.id, chart.symbol, chart.exchange || 'NSE', alerts) : undefined}
-                        onDrawingsSync={onDrawingsSync}
+                        onDrawingsSync={onDrawingsSync ? (drawings: unknown[]) => onDrawingsSync(chart.id, drawings) : undefined}
                         onAlertTriggered={onAlertTriggered ? (evt: AlertEvent) => onAlertTriggered(chart.id, chart.symbol, chart.exchange || 'NSE', evt) : undefined}
                         onReplayModeChange={onReplayModeChange ? (isActive: boolean) => onReplayModeChange(chart.id, isActive) : undefined}
                         onOHLCDataUpdate={onOHLCDataUpdate}

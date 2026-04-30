@@ -4,6 +4,7 @@
  */
 
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
+import { normalizeSymbolExchange } from '../utils/symbolNormalization'; // TSK-CS-021
 
 // ==================== TYPES ====================
 
@@ -70,7 +71,9 @@ export interface UseSymbolHandlersParams {
   setCharts: Dispatch<SetStateAction<ChartConfig[]>>;
   activeChartId: number;
   watchlistSymbols: WatchlistSymbol[];
-  setWatchlistsState: Dispatch<SetStateAction<WatchlistsState>>;
+  /** TSK-CS-018: Use Context domain functions instead of raw setter */
+  addSymbolToWatchlist: (symbol: string, exchange?: string) => void;
+  removeSymbolFromWatchlist: (symbol: string, exchange?: string | null) => void;
   setIsSearchOpen: Dispatch<SetStateAction<boolean>>;
   setSearchMode: Dispatch<SetStateAction<SearchMode>>;
 }
@@ -96,7 +99,8 @@ export const useSymbolHandlers = ({
   setCharts,
   activeChartId,
   watchlistSymbols,
-  setWatchlistsState,
+  addSymbolToWatchlist,
+  removeSymbolFromWatchlist,
   setIsSearchOpen,
   setSearchMode,
 }: UseSymbolHandlersParams): UseSymbolHandlersReturn => {
@@ -104,8 +108,10 @@ export const useSymbolHandlers = ({
   const handleSymbolChange = useCallback(
     (symbolData: string | SymbolData) => {
       // Handle both string (legacy) and object format { symbol, exchange, scaleMode }
-      const symbol = typeof symbolData === 'string' ? symbolData : symbolData.symbol;
-      const exchange = typeof symbolData === 'string' ? 'NSE' : symbolData.exchange || 'NSE';
+      const rawSymbol = typeof symbolData === 'string' ? symbolData : symbolData.symbol;
+      const rawExchange = typeof symbolData === 'string' ? 'NSE' : symbolData.exchange || 'NSE';
+      // TSK-CS-021: normalize to canonical symbol/exchange at the single entry point
+      const { symbol, exchange } = normalizeSymbolExchange(rawSymbol, rawExchange);
       const scaleMode =
         typeof symbolData === 'object' && symbolData.scaleMode
           ? symbolData.scaleMode
@@ -162,19 +168,13 @@ export const useSymbolHandlers = ({
           return s.symbol === symbol && s.exchange === exchange;
         });
         if (!existsInWatchlist) {
-          setWatchlistsState((prev) => ({
-            ...prev,
-            lists: prev.lists.map((wl) =>
-              wl.id === prev.activeListId
-                ? { ...wl, symbols: [...wl.symbols, { symbol, exchange }] }
-                : wl
-            ),
-          }));
+          // TSK-CS-018: use Context domain function, not raw state setter
+          addSymbolToWatchlist(symbol, exchange);
         }
         setIsSearchOpen(false);
       }
     },
-    [searchMode, setCharts, activeChartId, watchlistSymbols, setWatchlistsState, setIsSearchOpen]
+    [searchMode, setCharts, activeChartId, watchlistSymbols, addSymbolToWatchlist, setIsSearchOpen]
   );
 
   // Remove symbol from watchlist
@@ -182,28 +182,10 @@ export const useSymbolHandlers = ({
     (symbolData: string | SymbolData) => {
       const symbolToRemove = typeof symbolData === 'string' ? symbolData : symbolData.symbol;
       const exchangeToRemove = typeof symbolData === 'string' ? null : symbolData.exchange || null;
-      setWatchlistsState((prev) => ({
-        ...prev,
-        lists: prev.lists.map((wl) =>
-          wl.id === prev.activeListId
-            ? {
-                ...wl,
-                symbols: wl.symbols.filter((s) => {
-                  // If s is a string, compare by symbol name only
-                  if (typeof s === 'string') return s !== symbolToRemove;
-                  // If we have exchange info, match both symbol and exchange
-                  if (exchangeToRemove) {
-                    return !(s.symbol === symbolToRemove && s.exchange === exchangeToRemove);
-                  }
-                  // Fallback: match by symbol only (backward compatibility)
-                  return s.symbol !== symbolToRemove;
-                }),
-              }
-            : wl
-        ),
-      }));
+      // TSK-CS-018: use Context domain function, not raw state setter
+      removeSymbolFromWatchlist(symbolToRemove, exchangeToRemove);
     },
-    [setWatchlistsState]
+    [removeSymbolFromWatchlist]
   );
 
   // Open search in 'add to watchlist' mode

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import type { MouseEvent } from 'react';
 import styles from './GlobalAlertPopup.module.css';
+import { normalizeSymbolExchange } from '../../utils/symbolNormalization';
 
 interface AlertNotification {
     id: string;
@@ -32,7 +33,8 @@ export interface GlobalAlertPopupProps {
  * GlobalAlertPopup - Shows alert notifications for background alerts
  * Works independently of which chart is currently being viewed
  */
-const GlobalAlertPopup: React.FC<GlobalAlertPopupProps> = ({ alerts, onDismiss, onClick }) => {
+// React.memo prevents re-render when parent re-renders but props unchanged (TSK-CS-029)
+const GlobalAlertPopup: React.FC<GlobalAlertPopupProps> = React.memo(function GlobalAlertPopup({ alerts, onDismiss, onClick }) {
     const [dismissing, setDismissing] = useState<Record<string, boolean>>({});
 
     const handleDismiss = useCallback((alertId: string): void => {
@@ -47,13 +49,13 @@ const GlobalAlertPopup: React.FC<GlobalAlertPopupProps> = ({ alerts, onDismiss, 
         }, 300);
     }, [onDismiss]);
 
-    // Auto-dismiss after 60 seconds
+    // Auto-dismiss after 15 seconds
     useEffect(() => {
         const timers: Record<string, ReturnType<typeof setTimeout>> = {};
         alerts.forEach(alert => {
             timers[alert.id] = setTimeout(() => {
                 handleDismiss(alert.id);
-            }, 60000);
+            }, 15000);
         });
 
         return () => {
@@ -66,7 +68,9 @@ const GlobalAlertPopup: React.FC<GlobalAlertPopupProps> = ({ alerts, onDismiss, 
         if ((e.target as HTMLElement).closest('button')) return;
 
         if (onClick) {
-            onClick({ symbol: alert.symbol, exchange: alert.exchange });
+            // Normalize symbol/exchange before navigating — ensures canonical routing
+            const normalized = normalizeSymbolExchange(alert.symbol, alert.exchange);
+            onClick({ symbol: normalized.symbol, exchange: normalized.exchange });
             handleDismiss(alert.id);
         }
     }, [onClick, handleDismiss]);
@@ -85,13 +89,19 @@ const GlobalAlertPopup: React.FC<GlobalAlertPopupProps> = ({ alerts, onDismiss, 
         <div className={styles.container}>
             {alerts.map(alert => {
                 const isIndicatorAlert = alert.alertType === 'indicator';
-                const icon = isIndicatorAlert ? '📊' : '🪙';
+                // Use canonical display name for header/footer
+                const { symbol: displaySymbol } = normalizeSymbolExchange(alert.symbol, alert.exchange);
+                const icon = isIndicatorAlert ? '📊' : '🔔';
+                const indicatorName = alert.indicator?.toUpperCase() || 'Indicator';
                 const header = isIndicatorAlert
-                    ? `${alert.indicator?.toUpperCase() || 'Indicator'} Alert`
-                    : `Alert on ${alert.symbol}`;
+                    ? indicatorName + ' Alert — ' + displaySymbol
+                    : displaySymbol + ' Alert';
+                const dirArrow = alert.direction === 'up' ? '↑' : alert.direction === 'down' ? '↓' : '';
+                const conditionSuffix = alert.condition ? ': ' + alert.condition : '';
+                const currentPriceSuffix = alert.currentPrice != null ? ' (now ' + alert.currentPrice + ')' : '';
                 const message = isIndicatorAlert
-                    ? (alert.message || `${alert.indicator} ${alert.condition}`)
-                    : `${alert.symbol} Crossing ${alert.direction === 'up' ? '↑' : '↓'} ${alert.price}`;
+                    ? (alert.message || (alert.indicator + ' condition met' + conditionSuffix))
+                    : ('Price ' + dirArrow + ' ' + (alert.price ?? '') + currentPriceSuffix);
 
                 return (
                     <div
@@ -109,7 +119,7 @@ const GlobalAlertPopup: React.FC<GlobalAlertPopupProps> = ({ alerts, onDismiss, 
                             <div className={styles.header}>{header}</div>
                             <div className={styles.message}>{message}</div>
                             <div className={styles.footer}>
-                                <span className={styles.viewChart}>{alert.symbol} →</span>
+                                <span className={styles.viewChart}>{displaySymbol} →</span>
                                 <span className={styles.timestamp}>{formatTime(alert.timestamp)}</span>
                             </div>
                         </div>
@@ -126,6 +136,7 @@ const GlobalAlertPopup: React.FC<GlobalAlertPopupProps> = ({ alerts, onDismiss, 
             })}
         </div>
     );
-};
+
+});
 
 export default GlobalAlertPopup;

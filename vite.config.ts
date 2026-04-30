@@ -22,21 +22,24 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5001,
+    port: 7100,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:5000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://127.0.0.1:8765',
+        target: 'ws://127.0.0.1:8000',
         ws: true,
       },
       '/npl-time': {
-        target: 'https://www.nplindia.in',
+        target: 'https://www.nplindia.in/cgi-bin/ntp_client',
         changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/npl-time/, '/cgi-bin/ntp_client'),
-        secure: true,
+        rewrite: (path) => path.replace(/^\/npl-time/, ''),
+        headers: {
+          Referer: 'https://www.nplindia.in/ntp-service',
+          Origin: 'https://www.nplindia.in',
+        }
       },
     },
   },

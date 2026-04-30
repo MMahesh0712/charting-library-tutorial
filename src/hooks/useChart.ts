@@ -116,7 +116,7 @@ const DEFAULT_CHART: ExtendedChartConfig = {
   id: 1,
   symbol: 'NIFTY 50',
   exchange: 'NSE',
-  interval: '1d',
+  interval: '5m',
   indicators: [],
   comparisonSymbols: [],
   strategyConfig: null,

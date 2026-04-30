@@ -3,11 +3,12 @@ import type { KeyboardEvent, DragEvent, MouseEvent } from 'react';
 import { Plus } from 'lucide-react';
 import styles from './Watchlist.module.css';
 import classNames from 'classnames';
-import WatchlistSelector from './WatchlistSelector';
+import WatchlistSelector, { AUTO_WATCHLIST_ID } from './WatchlistSelector';
 import WatchlistItem from './WatchlistItem';
 import WatchlistSection from './WatchlistSection';
 import SymbolTooltip from './SymbolTooltip';
 import ContextMenu from './ContextMenu';
+import AutoWatchlistTab from './AutoWatchlistTab';
 import { useSmartTooltip } from '../../hooks/useSmartTooltip';
 
 // Import extracted hooks
@@ -504,86 +505,126 @@ const Watchlist: React.FC<WatchlistProps> = ({
                     ))}
                 </div>
             )}
-
-            <div className={styles.columnHeaders}>
-                <span
-                    className={styles.colSymbol}
-                    style={{ width: columnWidths.symbol, minWidth: columnWidths.symbol }}
-                    onClick={() => handleSort('symbol')}
-                >
-                    Symbol {sortConfig.key === 'symbol' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                </span>
-                <div
-                    className={styles.resizeHandle}
-                    onMouseDown={(e) => handleResizeStart(e, 'symbol')}
+            {/* Auto Watchlist mode — show Active Markets panel */}
+            {activeWatchlistId === AUTO_WATCHLIST_ID ? (
+                <AutoWatchlistTab
+                    onSymbolSelect={onSymbolSelect}
+                    currentSymbol={currentSymbol}
                 />
-                <span
-                    className={styles.colLast}
-                    style={{ width: columnWidths.last, minWidth: MIN_COLUMN_WIDTH }}
-                    onClick={() => handleSort('last')}
-                >
-                    Last {sortConfig.key === 'last' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                </span>
-                <div
-                    className={styles.resizeHandle}
-                    onMouseDown={(e) => handleResizeStart(e, 'last')}
-                />
-                <span
-                    className={styles.colChg}
-                    style={{ width: columnWidths.chg, minWidth: MIN_COLUMN_WIDTH }}
-                    onClick={() => handleSort('chg')}
-                >
-                    Chg {sortConfig.key === 'chg' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                </span>
-                <div
-                    className={styles.resizeHandle}
-                    onMouseDown={(e) => handleResizeStart(e, 'chg')}
-                />
-                <span
-                    className={styles.colChgP}
-                    style={{ width: columnWidths.chgP, minWidth: MIN_COLUMN_WIDTH }}
-                    onClick={() => handleSort('chgP')}
-                >
-                    Chg% {sortConfig.key === 'chgP' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                </span>
-            </div>
-
-            <div
-                className={styles.list}
-                ref={listRef}
-                tabIndex={0}
-                onKeyDown={handleKeyDown}
-            >
-                {isLoading ? (
-                    Array.from({ length: 5 }).map((_, index) => (
-                        <SkeletonRow key={`skeleton-${index}`} />
-                    ))
-                ) : sortedItems.length === 0 ? (
-                    <div className={styles.emptyState}>
-                        <Plus size={24} />
-                        <p>No symbols in watchlist</p>
+            ) : (
+                <>
+                    <div className={styles.columnHeaders}>
+                        <span
+                            className={styles.colSymbol}
+                            style={{ width: columnWidths.symbol, minWidth: columnWidths.symbol }}
+                            onClick={() => handleSort('symbol')}
+                        >
+                            Symbol {sortConfig.key === 'symbol' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </span>
+                        <div
+                            className={styles.resizeHandle}
+                            onMouseDown={(e) => handleResizeStart(e, 'symbol')}
+                        />
+                        <span
+                            className={styles.colLast}
+                            style={{ width: columnWidths.last, minWidth: MIN_COLUMN_WIDTH }}
+                            onClick={() => handleSort('last')}
+                        >
+                            Last {sortConfig.key === 'last' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </span>
+                        <div
+                            className={styles.resizeHandle}
+                            onMouseDown={(e) => handleResizeStart(e, 'last')}
+                        />
+                        <span
+                            className={styles.colChg}
+                            style={{ width: columnWidths.chg, minWidth: MIN_COLUMN_WIDTH }}
+                            onClick={() => handleSort('chg')}
+                        >
+                            Chg {sortConfig.key === 'chg' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </span>
+                        <div
+                            className={styles.resizeHandle}
+                            onMouseDown={(e) => handleResizeStart(e, 'chg')}
+                        />
+                        <span
+                            className={styles.colChgP}
+                            style={{ width: columnWidths.chgP, minWidth: MIN_COLUMN_WIDTH }}
+                            onClick={() => handleSort('chgP')}
+                        >
+                            Chg% {sortConfig.key === 'chgP' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </span>
                     </div>
-                ) : (
-                    groupedItems.map((group, groupIndex) => {
-                        const sectionStartIndex = group.sectionIndex ?? 0;
 
-                        return (
-                            <React.Fragment key={`group-${groupIndex}`}>
-                                {group.section && (
-                                    <WatchlistSection
-                                        title={group.section}
-                                        isCollapsed={collapsedSections?.includes(group.section)}
-                                        isDragging={draggedSection === group.section}
-                                        onToggle={() => onToggleSection?.(group.section!)}
-                                        onRename={(oldTitle, newTitle) => onRenameSection?.(oldTitle, newTitle)}
-                                        onDelete={(title) => onDeleteSection?.(title)}
-                                        sectionIndex={sectionStartIndex}
-                                        onDragStart={handleSectionDragStart}
-                                        onDragOver={handleDragOver}
-                                        onDragEnd={handleSectionDragEnd}
-                                        onDrop={handleSectionDrop}
-                                    >
-                                        {group.items.map((item) => {
+                    <div
+                        className={styles.list}
+                        ref={listRef}
+                        tabIndex={0}
+                        onKeyDown={handleKeyDown}
+                    >
+                        {isLoading ? (
+                            Array.from({ length: 5 }).map((_, index) => (
+                                <SkeletonRow key={`skeleton-${index}`} />
+                            ))
+                        ) : sortedItems.length === 0 ? (
+                            <div className={styles.emptyState}>
+                                <Plus size={24} />
+                                <p>No symbols in watchlist</p>
+                            </div>
+                        ) : (
+                            groupedItems.map((group, groupIndex) => {
+                                const sectionStartIndex = group.sectionIndex ?? 0;
+
+                                return (
+                                    <React.Fragment key={`group-${groupIndex}`}>
+                                        {group.section && (
+                                            <WatchlistSection
+                                                title={group.section}
+                                                isCollapsed={collapsedSections?.includes(group.section)}
+                                                isDragging={draggedSection === group.section}
+                                                onToggle={() => onToggleSection?.(group.section!)}
+                                                onRename={(oldTitle, newTitle) => onRenameSection?.(oldTitle, newTitle)}
+                                                onDelete={(title) => onDeleteSection?.(title)}
+                                                sectionIndex={sectionStartIndex}
+                                                onDragStart={handleSectionDragStart}
+                                                onDragOver={handleDragOver}
+                                                onDragEnd={handleSectionDragEnd}
+                                                onDrop={handleSectionDrop}
+                                            >
+                                                {group.items.map((item) => {
+                                                    const globalIndex = sortedItems.findIndex(
+                                                        i => typeof i !== 'string' && i.symbol === item.symbol && i.exchange === item.exchange
+                                                    );
+                                                    const stockIndex = stockItems.findIndex(
+                                                        i => i.symbol === item.symbol && i.exchange === item.exchange
+                                                    );
+                                                    return (
+                                                        <WatchlistItem
+                                                            key={`${item.symbol}-${item.exchange}`}
+                                                            item={item}
+                                                            isActive={currentSymbol === item.symbol && currentExchange === (item.exchange || 'NSE')}
+                                                            isFocused={stockIndex === focusedIndex}
+                                                            isDragging={draggedIndex === globalIndex}
+                                                            columnWidths={columnWidths}
+                                                            minColumnWidth={MIN_COLUMN_WIDTH}
+                                                            sortEnabled={!!sortConfig.key}
+                                                            index={globalIndex}
+                                                            onSelect={handleSymbolSelect}
+                                                            onRemove={onRemoveClick}
+                                                            onDragStart={handleDragStart}
+                                                            onDragOver={handleDragOver}
+                                                            onDragEnd={handleDragEnd}
+                                                            onDrop={handleDrop}
+                                                            onContextMenu={handleContextMenu}
+                                                            onMouseEnter={handleItemMouseEnter}
+                                                            onMouseLeave={handleItemMouseLeave}
+                                                            onMouseMove={handleItemMouseMove}
+                                                        />
+                                                    );
+                                                })}
+                                            </WatchlistSection>
+                                        )}
+                                        {!group.section && group.items.map((item) => {
                                             const globalIndex = sortedItems.findIndex(
                                                 i => typeof i !== 'string' && i.symbol === item.symbol && i.exchange === item.exchange
                                             );
@@ -614,44 +655,13 @@ const Watchlist: React.FC<WatchlistProps> = ({
                                                 />
                                             );
                                         })}
-                                    </WatchlistSection>
-                                )}
-                                {!group.section && group.items.map((item) => {
-                                    const globalIndex = sortedItems.findIndex(
-                                        i => typeof i !== 'string' && i.symbol === item.symbol && i.exchange === item.exchange
-                                    );
-                                    const stockIndex = stockItems.findIndex(
-                                        i => i.symbol === item.symbol && i.exchange === item.exchange
-                                    );
-                                    return (
-                                        <WatchlistItem
-                                            key={`${item.symbol}-${item.exchange}`}
-                                            item={item}
-                                            isActive={currentSymbol === item.symbol && currentExchange === (item.exchange || 'NSE')}
-                                            isFocused={stockIndex === focusedIndex}
-                                            isDragging={draggedIndex === globalIndex}
-                                            columnWidths={columnWidths}
-                                            minColumnWidth={MIN_COLUMN_WIDTH}
-                                            sortEnabled={!!sortConfig.key}
-                                            index={globalIndex}
-                                            onSelect={handleSymbolSelect}
-                                            onRemove={onRemoveClick}
-                                            onDragStart={handleDragStart}
-                                            onDragOver={handleDragOver}
-                                            onDragEnd={handleDragEnd}
-                                            onDrop={handleDrop}
-                                            onContextMenu={handleContextMenu}
-                                            onMouseEnter={handleItemMouseEnter}
-                                            onMouseLeave={handleItemMouseLeave}
-                                            onMouseMove={handleItemMouseMove}
-                                        />
-                                    );
-                                })}
-                            </React.Fragment>
-                        );
-                    })
-                )}
-            </div>
+                                    </React.Fragment>
+                                );
+                            })
+                        )}
+                    </div>
+                </>
+            )}
 
             {/* Smart Tooltip */}
             <SymbolTooltip

@@ -11,6 +11,7 @@ import { subscribeToMultiTicker } from './openalgo';
 import logger from '../utils/logger';
 import { IndicatorDataManager } from './indicatorDataManager';
 import { AlertEvaluator } from '../utils/alerts/alertEvaluator';
+import { normalizeSymbolExchange, isSameSymbol } from '../utils/symbolNormalization'; // TSK-CS-023
 
 // Must match ChartComponent.jsx storage key
 const ALERT_STORAGE_KEY = STORAGE_KEYS.CHART_ALERTS;
@@ -150,9 +151,17 @@ class GlobalAlertMonitor {
   /** Debounce timer for storage change events */
   private _storageChangeDebounceTimer: ReturnType<typeof setTimeout> | null;
 
+  /** TSK-CS-023: In-memory guard — alertIds that have already fired this session */
+  private _firedAlerts: Set<string>;
+
+  /** TSK-CS-024: bar-boundary tracking for once_per_bar indicator alerts — alertId -> last bar timestamp */
+  private _lastTriggeredBarTime: Map<string, number>;
+
   constructor() {
     this._lastPrices = new Map();
     this._alertPositions = new Map();
+    this._firedAlerts = new Set();
+    this._lastTriggeredBarTime = new Map();
     this._ws = null;
     this._onTrigger = null;
     this._isRunning = false;
@@ -215,12 +224,17 @@ class GlobalAlertMonitor {
             if (alert.createdAt && alert.createdAt < cutoff) continue;
             if (alert.status === 'triggered') continue;
 
-            const [symbol, exchange] = key.split(':');
+            const [rawSym, rawExch] = key.split(':');
+            // TSK-CS-023: normalize symbol/exchange at load time for consistent matching
+            const { symbol: normSym, exchange: normExch } = normalizeSymbolExchange(
+              rawSym || alert.symbol,
+              rawExch || alert.exchange || 'NSE'
+            );
             allAlerts.push({
               ...alert,
               type: 'price',
-              symbol: symbol || alert.symbol,
-              exchange: exchange || alert.exchange || 'NSE',
+              symbol: normSym,
+              exchange: normExch,
             });
           }
         }
@@ -234,12 +248,17 @@ class GlobalAlertMonitor {
           if (alert.status === 'Triggered' || alert.status === 'Paused') continue;
           if (alert.type !== 'indicator') continue;
 
+          // TSK-CS-023: normalize indicator alert symbol too
+          const { symbol: normSym2, exchange: normExch2 } = normalizeSymbolExchange(
+            alert.symbol,
+            alert.exchange || 'NSE'
+          );
           allAlerts.push({
             ...alert,
             createdAt: alert.created_at,
             type: 'indicator',
-            symbol: alert.symbol,
-            exchange: alert.exchange || 'NSE',
+            symbol: normSym2,
+            exchange: normExch2,
             alertType: alert.alert_type,
             price: alert.value || 0,
           });
@@ -422,13 +441,14 @@ class GlobalAlertMonitor {
   private async _onPriceUpdate(data: PriceUpdateData): Promise<void> {
     if (!data || !data.symbol || data.last === undefined || data.last === null) return;
 
-    const symbol = data.symbol;
-    const exchange = data.exchange || 'NSE';
+    // TSK-CS-023: normalize incoming tick symbol/exchange at entry point
+    const { symbol, exchange } = normalizeSymbolExchange(data.symbol, data.exchange || 'NSE');
     const currentPrice = data.last;
     const key = this._getSymbolKey(symbol, exchange);
 
+    // TSK-CS-023: use isSameSymbol for fuzzy matching (BANKNIFTY ↔ NIFTY BANK etc.)
     const alerts = this._getAlerts().filter(
-      (a) => a.symbol === symbol && (a.exchange || 'NSE') === exchange
+      (a) => isSameSymbol(a.symbol, symbol) && (a.exchange || 'NSE') === exchange
     );
 
     if (alerts.length > 0) {
@@ -447,10 +467,14 @@ class GlobalAlertMonitor {
 
     // Check price alerts
     for (const alert of priceAlerts) {
+      // TSK-CS-023: skip already-fired alerts (in-memory guard prevents double-trigger within session)
+      if (this._firedAlerts.has(alert.id)) continue;
+
       const triggerEvent = this._checkCrossing(alert, currentPrice);
 
       if (triggerEvent) {
         logger.debug('[GlobalAlertMonitor] Price alert triggered:', triggerEvent);
+        this._firedAlerts.add(alert.id); // guard first, then remove
         this._removeAlert(alert.id);
 
         if (this._onTrigger) {
@@ -459,16 +483,18 @@ class GlobalAlertMonitor {
       }
     }
 
-    // Check indicator alerts
+    // Check indicator alerts — TSK-CS-024
     if (indicatorAlerts.length > 0) {
       for (const alert of indicatorAlerts) {
         try {
-          // Skip alerts without indicator defined
-          if (!alert.indicator) {
-            continue;
-          }
+          if (!alert.indicator) continue;
+
+          // TSK-CS-024: skip already-fired indicator alerts
+          if (this._firedAlerts.has(alert.id)) continue;
+
           const indicatorId = alert.indicator;
-          const interval = alert.interval || '1m';
+          const rawInterval = alert.interval || '1m';
+          const interval = this._normalizeInterval(rawInterval); // TSK-CS-024: normalize interval
           const cacheKey = `${key}:${interval}:${indicatorId}`;
 
           const ohlcData = this._getOHLCData(symbol, exchange, interval);
@@ -478,6 +504,17 @@ class GlobalAlertMonitor {
               `[GlobalAlertMonitor] No OHLC data for ${symbol}:${exchange}:${interval}, skipping indicator alert`
             );
             continue;
+          }
+
+          // TSK-CS-024: bar-boundary guard for once_per_bar — use last bar's timestamp
+          const frequency = alert.frequency || 'once_per_bar';
+          if (frequency === 'once_per_bar' && ohlcData.length > 0) {
+            const lastBarTime = ohlcData[ohlcData.length - 1]?.time ?? 0;
+            const lastFiredBar = this._lastTriggeredBarTime.get(alert.id) ?? -1;
+            if (lastFiredBar === lastBarTime) {
+              // Already fired on this bar — skip until new bar opens
+              continue;
+            }
           }
 
           logger.debug(
@@ -505,8 +542,14 @@ class GlobalAlertMonitor {
             if (triggerEvent) {
               logger.debug('[GlobalAlertMonitor] Indicator alert triggered:', triggerEvent);
 
-              const frequency = alert.frequency || 'once_per_bar';
               if (frequency === 'once_per_bar') {
+                // TSK-CS-024: record bar time to prevent re-trigger on same bar
+                const lastBarTime = ohlcData[ohlcData.length - 1]?.time ?? 0;
+                this._lastTriggeredBarTime.set(alert.id, lastBarTime);
+                this._markIndicatorAlertTriggered(alert.id);
+              } else {
+                // every_time: use firedAlerts guard (fires once per session for safety)
+                this._firedAlerts.add(alert.id);
                 this._markIndicatorAlertTriggered(alert.id);
               }
 
@@ -576,14 +619,26 @@ class GlobalAlertMonitor {
   }
 
   /**
-   * Normalize interval format (e.g., '1' -> '1m', '3' -> '3m')
+   * Normalize interval format — TSK-CS-024
+   * '1' -> '1m', '3' -> '3m', '60' -> '1h', '1d'/'D' -> '1d', etc.
    */
   private _normalizeInterval(interval: string): string {
-    if (!interval) return interval;
-    if (/^\d+$/.test(interval)) {
-      return `${interval}m`;
+    if (!interval) return '1m';
+    const s = interval.trim();
+    // Already has unit suffix
+    if (/^\d+(s|m|h|d|w|M)$/i.test(s)) return s.toLowerCase();
+    // Plain digits — treat as minutes
+    if (/^\d+$/.test(s)) {
+      const n = parseInt(s, 10);
+      if (n >= 1440) return `${n / 1440}d`;
+      if (n >= 60) return `${n / 60}h`;
+      return `${n}m`;
     }
-    return interval;
+    // Legacy single-letter (D, W, M)
+    if (s === 'D' || s === '1D') return '1d';
+    if (s === 'W' || s === '1W') return '1w';
+    if (s === 'M' || s === '1M') return '1M';
+    return s.toLowerCase();
   }
 
   /**
@@ -724,6 +779,8 @@ class GlobalAlertMonitor {
 
     this._lastPrices.clear();
     this._alertPositions.clear();
+    this._firedAlerts.clear(); // TSK-CS-023: reset fired guard on stop
+    this._lastTriggeredBarTime.clear(); // TSK-CS-024: reset bar-boundary tracking
     this._previousIndicatorValues.clear();
     this._ohlcCache.clear();
     this._cachedAlerts = [];

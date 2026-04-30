@@ -300,6 +300,7 @@ const OptionChainModal: FC<OptionChainModalProps> = ({ isOpen, onClose, onSelect
         setIsLoadingExpiries(true);
 
         try {
+            logger.debug('[OptionChain] Calling getAvailableExpiries for', currentSymbol);
             const expiries = await getAvailableExpiries(currentSymbol, currentExchange) as string[];
 
             if (requestId !== expiryRequestIdRef.current) {
@@ -338,6 +339,7 @@ const OptionChainModal: FC<OptionChainModalProps> = ({ isOpen, onClose, onSelect
         setError(null);
 
         try {
+            logger.debug('[OptionChain] Calling getOptionChain for', currentSymbol, currentExpiry, 'strikes:', requestedStrikeCount);
             const chain = await getOptionChain(currentSymbol, currentExchange, currentExpiry, requestedStrikeCount) as OptionChainData;
 
             if (requestId !== chainRequestIdRef.current) {
@@ -874,7 +876,11 @@ const OptionChainModal: FC<OptionChainModalProps> = ({ isOpen, onClose, onSelect
                                         className={classNames(styles.dateBtn, {
                                             [styles.activeDate]: selectedExpiry === d.expiry
                                         })}
-                                        onClick={() => setSelectedExpiry(d.expiry)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            logger.debug('[OptionChain] Expiry clicked:', d.expiry);
+                                            setSelectedExpiry(d.expiry);
+                                        }}
                                     >
                                         {d.day}
                                     </button>

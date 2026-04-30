@@ -115,7 +115,7 @@
 /* Popover / Flyout Menu */
 .popover {
     position: fixed;
-    background: #1e222d;
+    background: var(--tv-color-dropdown-background);
     border: 1px solid var(--tv-color-border);
     border-radius: 4px;
     padding: 6px 0;

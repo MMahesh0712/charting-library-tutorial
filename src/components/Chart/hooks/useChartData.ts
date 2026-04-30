@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, RefObject, useState } from 'react';
 import { getKlines, getHistoricalKlines, subscribeToTicker } from '../../../services/openalgo';
 import { combineMultiLegOHLC } from '../../../services/optionChain';
-import { getAccurateISTTimestamp, syncTimeWithAPI, shouldResync } from '../../../services/timeService';
+import { getAccurateISTTimestamp, getAccurateUTCTimestamp, syncTimeWithAPI, shouldResync } from '../../../services/timeService';
 import { subscribeToNetworkRecovery } from '../../../services/connectionStatus';
 import { intervalToSeconds } from '../../../utils/timeframes';
 import { logger } from '../../../utils/logger';
@@ -102,6 +102,8 @@ export function useChartData({
 
     // Network recovery trigger - increments when network recovers to force data refetch
     const [networkRecoveryKey, setNetworkRecoveryKey] = useState(0);
+    // TSK-CS-010 FIX: Track last-known candle time so gap-fill can use it
+    const lastKnownCandleTimeRef = useRef<number | null>(null);
 
     // Keep refs in sync with props
     useEffect(() => { symbolRef.current = symbol; }, [symbol]);
@@ -111,11 +113,74 @@ export function useChartData({
     // Subscribe to network recovery events
     useEffect(() => {
         const unsubscribe = subscribeToNetworkRecovery(() => {
-            logger.debug('[useChartData] Network recovery detected, triggering data refetch');
+            logger.debug('[useChartData] Network recovery detected, attempting gap-fill');
             setNetworkRecoveryKey(prev => prev + 1);
         });
         return unsubscribe;
     }, []);
+
+    // TSK-CS-010 FIX: On network recovery, fetch only the missing candles since
+    // the last known candle time (gap-fill), instead of triggering a full reload.
+    // Falls back to full reload (networkRecoveryKey bump) if gap-fill fails or
+    // the gap is too large (> 5 days worth of 1m candles).
+    useEffect(() => {
+        if (networkRecoveryKey === 0) return;  // skip initial mount
+
+        const lastTime = lastKnownCandleTimeRef.current;
+        if (!lastTime || !mainSeriesRef.current || !dataRef.current?.length) return;
+
+        const nowSec = Math.floor(Date.now() / 1000);
+        const gapSeconds = nowSec - lastTime;
+        const intervalSec = intervalToSeconds(interval);
+        const MAX_GAP_CANDLES = 5 * 6 * 60; // 5 days of 1m candles — beyond this, full reload
+
+        if (gapSeconds > MAX_GAP_CANDLES * intervalSec) {
+            logger.warn('[GapFill] Gap too large (' + gapSeconds + 's), falling back to full reload');
+            return; // networkRecoveryKey already bumped → main effect will full-reload
+        }
+
+        const gapStart = new Date((lastTime - intervalSec) * 1000); // one interval back for overlap
+        const gapEnd   = new Date(nowSec * 1000);
+        const formatDate = (d: Date): string => d.toISOString().split('T')[0];
+
+        logger.debug('[GapFill] Fetching gap:', formatDate(gapStart), '→', formatDate(gapEnd),
+            '(~' + Math.round(gapSeconds / intervalSec) + ' candles)');
+
+        const ac = new AbortController();
+
+        getHistoricalKlines(symbolRef.current, exchangeRef.current, interval,
+            formatDate(gapStart), formatDate(gapEnd), ac.signal)
+            .then(gapCandles => {
+                if (!gapCandles?.length) return;
+                const existingLatest = lastKnownCandleTimeRef.current ?? 0;
+                const newCandles = gapCandles.filter(c => c.time > existingLatest);
+                if (!newCandles.length) return;
+
+                logger.debug('[GapFill] Merging', newCandles.length, 'gap candles');
+
+                const merged = [...dataRef.current, ...newCandles];
+                merged.sort((a, b) => a.time - b.time);
+                dataRef.current = merged;
+                lastKnownCandleTimeRef.current = merged[merged.length - 1].time;
+
+                const activeType = chartTypeRef.current;
+                const transformed = transformData(merged, activeType || 'candlestick');
+                const withFuture = addFutureWhitespacePoints(transformed, intervalSec);
+                mainSeriesRef.current?.setData(withFuture);
+
+                if (updateIndicators && indicatorsRef?.current) {
+                    updateIndicators(merged, indicatorsRef.current);
+                }
+            })
+            .catch(err => {
+                if (err.name !== 'AbortError') {
+                    logger.warn('[GapFill] Failed, chart will rely on WebSocket ticks:', err);
+                }
+            });
+
+        return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [networkRecoveryKey]);
 
     // Load older historical data when user scrolls back
     const loadOlderData = useCallback(async () => {
@@ -130,7 +195,10 @@ export function useChartData({
 
         try {
             const oldestTime = oldestLoadedTimeRef.current;
-            const oldestDate = new Date((oldestTime - IST_OFFSET_SECONDS) * 1000);
+            if (!oldestTime) return;
+
+            // Use UTC timestamp directly; new Date() handles local browser time for formatting
+            const oldestDate = new Date(oldestTime * 1000);
 
             const endDate = new Date(oldestDate);
             endDate.setDate(endDate.getDate() - 1);
@@ -313,9 +381,24 @@ export function useChartData({
 
                 if (cancelled) return;
 
+                logger.debug(`[useChartData] API Response for ${symbol}: ${data?.length || 0} candles`);
+
                 if (Array.isArray(data) && data.length > 0 && mainSeriesRef.current) {
+                    // MANDATORY FIX: Strictly sort candles by time ascending
+                    data.sort((a, b) => a.time - b.time);
+
+                    // Validate data format
+                    const firstCandle = data[0];
+                    if (!firstCandle.time || !firstCandle.open) {
+                        logger.error('[useChartData] Invalid candle format detected:', firstCandle);
+                        return;
+                    }
+
                     dataRef.current = data;
                     oldestLoadedTimeRef.current = data[0].time;
+                    lastKnownCandleTimeRef.current = data[data.length - 1].time; // TSK-CS-010
+
+                    logger.debug(`[useChartData] Setting data for ${symbol}: First candle ${new Date(data[0].time * 1000).toISOString()}, Last candle ${new Date(data[data.length - 1].time * 1000).toISOString()}`);
 
                     const activeType = chartTypeRef.current;
                     const transformedData = transformData(data, activeType || 'candlestick');
@@ -362,8 +445,9 @@ export function useChartData({
                         setupRegularWebSocket(cancelled);
                     }
                 } else {
+                    // TSK-CS-010 FIX: Do NOT call setData([]) here — it causes a blank flash.
+                    // Keep existing chart data visible until the new symbol's data arrives.
                     dataRef.current = [];
-                    mainSeriesRef.current?.setData([]);
                 }
             } catch (error: any) {
                 if (error.name === 'AbortError') return;
@@ -451,12 +535,28 @@ export function useChartData({
             const lastCandleTime = currentData[lastIndex].time;
 
             if (shouldResync()) syncTimeWithAPI();
-            const currentISTTime = getAccurateISTTimestamp();
-            const currentCandleTime = Math.floor(currentISTTime / intervalSeconds) * intervalSeconds;
+            const currentUTCTime = getAccurateUTCTimestamp();
+            const currentCandleTime = Math.floor(currentUTCTime / intervalSeconds) * intervalSeconds;
             const needNewCandle = currentCandleTime > lastCandleTime;
 
             let candle: any;
             if (needNewCandle) {
+                // TSK-CS-010 FIX: Fill any gap between last historical candle and first live tick.
+                // If the WS reconnected after a gap (e.g. 3 missed 1m candles), insert flat
+                // bridge candles so the chart doesn't show a visual hole.
+                const prevClose = currentData[lastIndex].close;
+                let fillTime = lastCandleTime + intervalSeconds;
+                while (fillTime < currentCandleTime) {
+                    currentData.push({
+                        time: fillTime,
+                        open: prevClose,
+                        high: prevClose,
+                        low: prevClose,
+                        close: prevClose,
+                        volume: 0,
+                    });
+                    fillTime += intervalSeconds;
+                }
                 candle = {
                     time: currentCandleTime,
                     open: closePrice,
@@ -483,6 +583,8 @@ export function useChartData({
             // If loadOlderData prepended, the length will have changed
             if (dataRef.current.length === originalLength) {
                 dataRef.current = currentData;
+                // TSK-CS-010: keep lastKnownCandleTimeRef current so gap-fill is accurate
+                lastKnownCandleTimeRef.current = currentData[currentData.length - 1].time;
             } else {
                 // Concurrent modification detected, discard this update
                 logger.debug('[WebSocket] Discarding tick update due to concurrent data modification');

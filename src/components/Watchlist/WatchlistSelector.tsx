@@ -7,6 +7,9 @@ import classNames from 'classnames';
 // Finance-related emoji palette for favorites
 const EMOJI_PALETTE = ['📈', '📉', '📊', '💹', '💰', '💵', '💎', '🏦', '🎯', '⭐', '🔥', '🚀', '💼', '📋', '🏆'];
 
+/** Virtual ID for the Active Markets auto-watchlist tab — not a real persisted watchlist */
+export const AUTO_WATCHLIST_ID = '__auto__';
+
 interface SymbolItem {
     symbol: string;
     exchange?: string;
@@ -271,7 +274,7 @@ const WatchlistSelector: React.FC<WatchlistSelectorProps> = ({
     return (
         <div className={styles.selector} ref={dropdownRef}>
             <button className={styles.selectorButton} onClick={handleToggle}>
-                <span className={styles.watchlistName}>{activeWatchlist?.name || 'Watchlist'}</span>
+                <span className={styles.watchlistName}>{activeId === AUTO_WATCHLIST_ID ? '⚡ Active Markets' : (activeWatchlist?.name || 'Watchlist')}</span>
                 <ChevronDown
                     size={14}
                     className={classNames(styles.chevron, { [styles.chevronOpen]: isOpen })}
@@ -399,6 +402,16 @@ const WatchlistSelector: React.FC<WatchlistSelectorProps> = ({
 
                     {/* Watchlist items */}
                     <div className={styles.dropdownList}>
+                        {/* Permanent Auto Watchlist entry */}
+                        <div
+                            className={classNames(styles.dropdownItem, {
+                                [styles.active]: activeId === AUTO_WATCHLIST_ID,
+                            })}
+                            onClick={() => handleSelect(AUTO_WATCHLIST_ID)}
+                        >
+                            <span className={styles.itemName}>⚡ Active Markets</span>
+                            <span className={styles.itemCount} style={{ color: '#ffca28' }}>Auto</span>
+                        </div>
                         {sortedWatchlists.map(wl => {
                             return (
                                 <div

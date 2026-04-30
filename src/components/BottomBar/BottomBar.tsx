@@ -122,9 +122,12 @@ const BottomBar: React.FC<BottomBarProps> = ({
     }, []);
 
     // Format time as HH:MM:SS
-    const formatTime = (date: Date | null): string => {
+    const formatTime = (date: Date | null, tz?: string): string => {
         if (!date) return '--:--:--';
-        return date.toLocaleTimeString('en-IN', { hour12: false });
+        return date.toLocaleTimeString('en-IN', { 
+            hour12: false,
+            timeZone: tz
+        });
     };
 
     // Get connection status icon color and tooltip
@@ -208,7 +211,7 @@ const BottomBar: React.FC<BottomBarProps> = ({
                     />
                     <span className={styles.timeLabel}>IST:</span>
                     <span className={classNames(styles.timeValue, styles.serverTime)}>
-                        {istTime ? formatTime(istTime) : '--:--:--'}
+                        {istTime ? formatTime(istTime, 'Asia/Kolkata') : '--:--:--'}
                     </span>
                 </div>
                 <div className={styles.separator} />

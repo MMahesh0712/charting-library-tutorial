@@ -3,6 +3,7 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import { Bell, Trash2, PlayCircle, PauseCircle, Edit2, TrendingUp } from 'lucide-react';
 import styles from './AlertsPanel.module.css';
 import classNames from 'classnames';
+import { normalizeSymbolExchange } from '../../utils/symbolNormalization';
 
 type AlertStatus = 'Active' | 'Triggered' | 'Paused';
 
@@ -44,7 +45,8 @@ export interface AlertsPanelProps {
     onEditAlert?: (alert: Alert) => void;
 }
 
-const AlertsPanel: React.FC<AlertsPanelProps> = ({
+// React.memo prevents re-render when parent re-renders but props unchanged (TSK-CS-029)
+const AlertsPanel: React.FC<AlertsPanelProps> = React.memo(function AlertsPanel({
     alerts,
     logs,
     onRemoveAlert,
@@ -52,7 +54,7 @@ const AlertsPanel: React.FC<AlertsPanelProps> = ({
     onPauseAlert,
     onNavigate,
     onEditAlert
-}) => {
+}) {
     const [activeTab, setActiveTab] = useState<'alerts' | 'log'>('alerts');
     const [focusedIndex, setFocusedIndex] = useState(-1);
     const listRef = useRef<HTMLDivElement>(null);
@@ -90,7 +92,9 @@ const AlertsPanel: React.FC<AlertsPanelProps> = ({
         if ((e.target as HTMLElement).closest('svg') || (e.target as HTMLElement).closest('button')) return;
 
         if (onNavigate && alert.symbol) {
-            onNavigate({ symbol: alert.symbol, exchange: alert.exchange || 'NSE' });
+            // Normalize before navigating — canonical routing
+            const normalized = normalizeSymbolExchange(alert.symbol, alert.exchange || 'NSE');
+            onNavigate({ symbol: normalized.symbol, exchange: normalized.exchange });
         }
     }, [onNavigate]);
 
@@ -131,15 +135,11 @@ const AlertsPanel: React.FC<AlertsPanelProps> = ({
                             <div className={styles.emptyState}>No active alerts</div>
                         ) : (
                             alerts.map((alert, index) => {
-                                // Normalize status so we always show a readable label
                                 const status = alert.status || 'Active';
                                 const statusKey = status.toLowerCase();
                                 const isIndicatorAlert = alert.type === 'indicator';
-
-                                // Get alert icon based on type
+                                const { symbol: displaySymbol } = normalizeSymbolExchange(alert.symbol, alert.exchange || 'NSE');
                                 const AlertIcon = isIndicatorAlert ? TrendingUp : Bell;
-
-                                // Get condition description
                                 const getConditionDescription = (): string => {
                                     if (isIndicatorAlert) {
                                         const condition = alert.condition as AlertCondition | undefined;
@@ -147,7 +147,6 @@ const AlertsPanel: React.FC<AlertsPanelProps> = ({
                                     }
                                     return (alert.condition as string) || 'Price Alert';
                                 };
-
                                 return (
                                     <div
                                         key={alert.id}
@@ -156,15 +155,13 @@ const AlertsPanel: React.FC<AlertsPanelProps> = ({
                                             [styles.indicatorAlert]: isIndicatorAlert
                                         })}
                                         onClick={(e) => handleAlertClick(alert, e)}
-                                        style={{ cursor: 'pointer' }}
+                                        style={{ cursor: "pointer" }}
                                         title="Click to view chart"
                                     >
                                         <div className={styles.itemHeader}>
                                             <div className={styles.symbolGroup}>
                                                 <AlertIcon size={14} className={styles.alertTypeIcon} />
-                                                <span className={styles.symbol}>
-                                                    {alert.symbol}{alert.exchange ? `:${alert.exchange}` : ''}
-                                                </span>
+                                                <span className={styles.symbol}>{displaySymbol}</span>
                                             </div>
                                             <span className={classNames(styles.status, styles[statusKey])}>
                                                 {status}
@@ -227,27 +224,29 @@ const AlertsPanel: React.FC<AlertsPanelProps> = ({
                         {logs.length === 0 ? (
                             <div className={styles.emptyState}>No logs</div>
                         ) : (
-                            logs.map((log, index) => (
-                                <div key={`${log.id}-${index}`} className={classNames(styles.logItem, {
-                                    [styles.focused]: index === focusedIndex
-                                })}>
-                                    <div className={styles.logHeader}>
-                                        <span className={styles.symbol}>
-                                            {log.symbol}{log.exchange ? `:${log.exchange}` : ''}
-                                        </span>
-                                        <span className={styles.time}>{new Date(log.time).toLocaleTimeString()}</span>
+                            logs.map((log, index) => {
+                                const { symbol: displaySymbol } = normalizeSymbolExchange(log.symbol, log.exchange || 'NSE');
+                                const logDate = new Date(log.time);
+                                const dateStr = logDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                                const timeStr = logDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                                return (
+                                    <div key={`${log.id}-${index}`} className={classNames(styles.logItem, {
+                                        [styles.focused]: index === focusedIndex
+                                    })}>
+                                        <div className={styles.logHeader}>
+                                            <span className={styles.symbol}>{displaySymbol}</span>
+                                            <span className={styles.time}>{dateStr} {timeStr}</span>
+                                        </div>
+                                        <div className={styles.message}>{log.message}</div>
                                     </div>
-                                    <div className={styles.message}>
-                                        {log.message}
-                                    </div>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
                 )}
             </div>
         </div>
     );
-};
+});
 
 export default AlertsPanel;

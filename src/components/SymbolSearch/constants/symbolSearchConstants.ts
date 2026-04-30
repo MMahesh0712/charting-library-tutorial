@@ -21,19 +21,22 @@ export interface PopularSymbol {
 export const FILTER_TABS: FilterTab[] = [
     { id: 'all', label: 'All', exchange: null, instrumenttype: null },
     { id: 'stocks', label: 'Stocks', exchange: 'NSE', instrumenttype: 'EQ' },
-    { id: 'futures', label: 'Futures', exchange: 'NFO', instrumenttype: 'FUT' },
-    { id: 'options', label: 'Options', exchange: 'NFO', instrumenttype: null },
-    { id: 'indices', label: 'Indices', exchange: 'NSE_INDEX', instrumenttype: null },
+    { id: 'futures', label: 'Futures', exchange: null, instrumenttype: 'Futures' },
+    { id: 'options', label: 'Options', exchange: null, instrumenttype: 'Options' },
+    { id: 'indices', label: 'Indices', exchange: null, instrumenttype: 'Indices' },
+    { id: 'mcx', label: 'MCX', exchange: 'MCX', instrumenttype: null },
 ];
 
-// Default popular symbols shown on initial load
+// Default popular symbols shown on initial load (exact Zerodha CSV tradingsymbols)
 export const DEFAULT_POPULAR_SYMBOLS: PopularSymbol[] = [
-    { symbol: 'NIFTY', exchange: 'NSE_INDEX', instrumenttype: 'INDEX', name: 'Nifty 50 Index' },
-    { symbol: 'BANKNIFTY', exchange: 'NSE_INDEX', instrumenttype: 'INDEX', name: 'Nifty Bank Index' },
-    { symbol: 'CNXSMALLCAP', exchange: 'NSE_INDEX', instrumenttype: 'INDEX', name: 'Nifty SmallCap 100 Index' },
-    { symbol: 'NIFTY_MID_SELECT', exchange: 'NSE_INDEX', instrumenttype: 'INDEX', name: 'Nifty MidCap Select Index' },
-    { symbol: 'CNXIT', exchange: 'NSE_INDEX', instrumenttype: 'INDEX', name: 'Nifty IT Index' },
-    { symbol: 'CNXFINANCE', exchange: 'NSE_INDEX', instrumenttype: 'INDEX', name: 'Nifty Financial Services Index' },
+    // 8 Trading Indices
+    { symbol: 'NIFTY 50', exchange: 'NSE', instrumenttype: 'INDEX', name: 'Nifty 50 Index' },
+    { symbol: 'NIFTY BANK', exchange: 'NSE', instrumenttype: 'INDEX', name: 'Nifty Bank Index' },
+    { symbol: 'NIFTY FIN SERVICE', exchange: 'NSE', instrumenttype: 'INDEX', name: 'Nifty Financial Services' },
+    { symbol: 'NIFTY MID SELECT', exchange: 'NSE', instrumenttype: 'INDEX', name: 'Nifty MidCap Select' },
+    { symbol: 'SENSEX', exchange: 'BSE', instrumenttype: 'INDEX', name: 'BSE Sensex' },
+    { symbol: 'BANKEX', exchange: 'BSE', instrumenttype: 'INDEX', name: 'BSE Bankex' },
+    // Top Stocks
     { symbol: 'RELIANCE', exchange: 'NSE', instrumenttype: 'EQ', name: 'Reliance Industries Ltd' },
     { symbol: 'TCS', exchange: 'NSE', instrumenttype: 'EQ', name: 'Tata Consultancy Services' },
     { symbol: 'INFY', exchange: 'NSE', instrumenttype: 'EQ', name: 'Infosys Ltd' },

@@ -99,11 +99,20 @@ export interface WatchlistContextValue {
 
 // ==================== CONSTANTS ====================
 
-/** Default watchlist configuration */
+/** Default watchlist configuration — 8 Trading Indices (Zerodha exact names) */
 const DEFAULT_WATCHLIST: Watchlist = {
   id: 'wl_default',
-  name: 'Watchlist 1',
-  symbols: [],
+  name: 'Pratham DHan',
+  symbols: [
+    { symbol: 'NIFTY 50', exchange: 'NSE' },
+    { symbol: 'NIFTY BANK', exchange: 'NSE' },
+    { symbol: 'NIFTY FIN SERVICE', exchange: 'NSE' },
+    { symbol: 'NIFTY MID SELECT', exchange: 'NSE' },
+    { symbol: 'SENSEX', exchange: 'BSE' },
+    { symbol: 'BANKEX', exchange: 'BSE' },
+    { symbol: 'CRUDEOIL', exchange: 'MCX' },
+    { symbol: 'NATURALGAS', exchange: 'MCX' },
+  ],
   isFavorite: false,
   collapsedSections: [],
 };
@@ -205,6 +214,11 @@ export function WatchlistProvider({ children }: WatchlistProviderProps) {
       .join(',');
     return `${watchlistsState.activeListId}:${symbolSet}`;
   }, [watchlistSymbols, watchlistsState.activeListId]);
+
+  // NOTE: Active Markets / Auto Watchlist is handled exclusively by autoWatchlistService
+  // (see services/autoWatchlistService.ts + hooks/useAutoWatchlist.ts + AutoWatchlistTab.tsx).
+  // WatchlistContext does NOT inject a wl_active_options list - that was a duplicate model.
+  // The UI uses the '__auto__' virtual ID to trigger AutoWatchlistTab directly.
 
   // Auto-save to localStorage
   useEffect(() => {

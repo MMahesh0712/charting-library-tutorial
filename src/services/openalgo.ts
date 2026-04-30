@@ -110,6 +110,7 @@ interface WSMessage {
   code?: string | undefined;
   broker?: string | undefined;
   data?: WSMessageData | undefined;
+  _token?: string | undefined;  // data-hub tick: instrument_token string
 }
 
 /** Subscriber entry */
@@ -178,22 +179,35 @@ class SharedWebSocketManager {
   private _subscribedSymbols: Set<string> = new Set();
   private _nextId: number = 1;
   private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private _reconnectAttempts: number = 0;                   // FIX: exponential backoff counter
   private _authenticated: boolean = false;
   private _wsWrapper: ManagedWebSocket | null = null;
   private _wasDisconnected: boolean = false;
+  private _closing: boolean = false;                         // FIX: explicit-close guard
 
   constructor() {
     // Listen for network recovery to trigger immediate reconnection
     subscribeToNetworkRecovery(() => {
       logger.debug('[SharedWS] Network recovery detected, attempting reconnection');
-      if (this._reconnectTimer) {
-        clearTimeout(this._reconnectTimer);
-        this._reconnectTimer = null;
-      }
-      if (this._subscribers.size > 0) {
+      this._cancelReconnect();
+      if (this._subscribers.size > 0 && !this._closing) {
+        this._reconnectAttempts = 0;                         // reset backoff on network recovery
         this._ensureConnected();
       }
     });
+  }
+
+  /** Cancel any pending reconnect timer. */
+  private _cancelReconnect(): void {
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+  }
+
+  /** Compute backoff delay: 2s, 4s, 8s, 16s, capped at 30s. */
+  private _backoffMs(): number {
+    return Math.min(2000 * Math.pow(2, this._reconnectAttempts), 30_000);
   }
 
   /**
@@ -257,7 +271,7 @@ class SharedWebSocketManager {
 
     this._subscribers.delete(subscriberId);
 
-    // Check if any symbols are no longer needed
+    // Check if any symbols are no longer needed by remaining subscribers
     for (const symbolKey of sub.symbols) {
       let stillNeeded = false;
       for (const [, otherSub] of this._subscribers) {
@@ -274,20 +288,21 @@ class SharedWebSocketManager {
 
     // Close connection if no subscribers left
     if (this._subscribers.size === 0 && this._ws) {
-      if (this._reconnectTimer) {
-        clearTimeout(this._reconnectTimer);
-        this._reconnectTimer = null;
-      }
+      this._closing = true;                                  // FIX: prevent onclose from re-scheduling
+      this._cancelReconnect();
+      this._authenticated = false;                           // FIX: reset auth state on explicit close
       if (this._wsWrapper) {
         activeWebSockets.delete(this._wsWrapper);
         this._wsWrapper = null;
       }
       this._ws.close();
       this._ws = null;
+      this._closing = false;
     }
   }
 
   private _ensureConnected(): void {
+    if (this._closing) return;                               // FIX: guard against explicit-close race
     if (this._ws && this._ws.readyState === WebSocket.OPEN) return;
     if (this._ws && this._ws.readyState === WebSocket.CONNECTING) return;
 
@@ -297,6 +312,12 @@ class SharedWebSocketManager {
     if (!apiKey) {
       logger.error('[SharedWS] No API key found. Please configure your API key in settings.');
       return;
+    }
+
+    // FIX: Remove stale wrapper before creating new connection
+    if (this._wsWrapper) {
+      activeWebSockets.delete(this._wsWrapper);
+      this._wsWrapper = null;
     }
 
     this._ws = new WebSocket(url);
@@ -344,6 +365,7 @@ class SharedWebSocketManager {
             'symbols'
           );
           this._authenticated = true;
+          this._reconnectAttempts = 0;                       // FIX: reset backoff on successful auth
           setConnectionStatus(ConnectionState.CONNECTED);
           this._resubscribeAll();
 
@@ -375,6 +397,49 @@ class SharedWebSocketManager {
             }
           }
         }
+
+        // Handle data-hub tick format: { type: 'tick', data: { instrument_token, last_price, ... } }
+        if (message.type === 'tick' && (message as any).data) {
+          const tick = (message as any).data as Record<string, unknown>;
+          const tokenStr = String(tick.instrument_token || '');
+          // Forward to all subscribers that have this token registered
+          for (const [id, sub] of this._subscribers) {
+            if (sub.ready) {
+              try {
+                sub.callback({
+                  type:     'tick',
+                  symbol:   String(tick.tradingsymbol || tick.instrument_token || ''),
+                  exchange: String(tick.exchange || 'NSE'),
+                  data: {
+                    ltp:        Number(tick.last_price || 0),
+                    last_price: Number(tick.last_price || 0),
+                    open:       Number((tick.ohlc as any)?.open  || tick.open_price  || 0),
+                    high:       Number((tick.ohlc as any)?.high  || tick.high_price  || 0),
+                    low:        Number((tick.ohlc as any)?.low   || tick.low_price   || 0),
+                    volume:     Number(tick.volume_traded || tick.volume || 0),
+                    timestamp:  Number(tick.exchange_timestamp || tick.timestamp || 0),
+                  },
+                  _token: tokenStr,
+                });
+              } catch (err) {
+                logger.error('[SharedWS] Tick callback error for subscriber', id, ':', err);
+              }
+            }
+          }
+        }
+
+        // Handle trade signal from strategies: { type: 'chart_signal', strategy, index, ... }
+        // Dispatch as a DOM CustomEvent so App.tsx can add markers to the matching chart
+        if (message.type === 'chart_signal') {
+          try {
+            window.dispatchEvent(
+              new CustomEvent('pratham-chart-signal', {
+                detail: message,
+                bubbles: false,
+              })
+            );
+          } catch (_) {}
+        }
       } catch (err) {
         logger.error('[SharedWS] Failed to parse WebSocket message:', err);
         logger.debug('[SharedWS] Raw message data:', event.data);
@@ -384,10 +449,18 @@ class SharedWebSocketManager {
     this._ws.onclose = () => {
       logger.debug('[SharedWS] Disconnected');
       this._authenticated = false;
-      this._wasDisconnected = true;
-      setConnectionStatus(ConnectionState.DISCONNECTED);
-      if (this._subscribers.size > 0) {
-        this._reconnectTimer = setTimeout(() => this._ensureConnected(), 2000);
+      if (!this._closing) {
+        // Only mark as disconnected and schedule reconnect for unexpected disconnects
+        this._wasDisconnected = true;
+        setConnectionStatus(ConnectionState.DISCONNECTED);
+        if (this._subscribers.size > 0) {
+          const delay = this._backoffMs();                   // FIX: exponential backoff
+          logger.debug(`[SharedWS] Reconnecting in ${delay}ms (attempt ${this._reconnectAttempts + 1})`);
+          this._reconnectTimer = setTimeout(() => {
+            this._reconnectAttempts++;
+            this._ensureConnected();
+          }, delay);
+        }
       }
     };
 
@@ -399,11 +472,14 @@ class SharedWebSocketManager {
   private _resubscribeAll(): void {
     if (!this._ws || this._ws.readyState !== WebSocket.OPEN || !this._authenticated) return;
 
+    // FIX: O(n) dedup using Set instead of Array.some() O(n²)
+    const seen = new Set<string>();
     const allSymbols: SymbolSubscription[] = [];
     for (const [, sub] of this._subscribers) {
       for (const symObj of sub.symbolObjs) {
         const key = `${symObj.symbol}:${symObj.exchange || 'NSE'}`;
-        if (!allSymbols.some((s) => `${s.symbol}:${s.exchange || 'NSE'}` === key)) {
+        if (!seen.has(key)) {
+          seen.add(key);
           allSymbols.push(symObj);
         }
       }
@@ -513,7 +589,7 @@ export const subscribeToTicker = (
   return sharedWebSocket.subscribe(
     subscriptions,
     (message: WSMessage) => {
-      if (message.type !== 'market_data') return;
+      if (message.type !== 'market_data' && message.type !== 'tick') return;
 
       const messageId = `${message.symbol}:${message.exchange || 'NSE'}`;
       if (messageId !== subscriptionId) return;
@@ -527,10 +603,10 @@ export const subscribeToTicker = (
 
         if (data.timestamp) {
           brokerTimestamp = Math.floor(data.timestamp / 1000);
-          time = brokerTimestamp + IST_OFFSET_SECONDS;
+          time = brokerTimestamp;
         } else {
           brokerTimestamp = Math.floor(Date.now() / 1000);
-          time = brokerTimestamp + IST_OFFSET_SECONDS;
+          time = brokerTimestamp;
         }
 
         const candle: Candle = {
@@ -574,7 +650,7 @@ export const subscribeToMultiTicker = (
   return sharedWebSocket.subscribe(
     subscriptions,
     (message: WSMessage) => {
-      if (message.type !== 'market_data' || !message.symbol) return;
+      if ((message.type !== 'market_data' && message.type !== 'tick') || !message.symbol) return;
 
       const data = message.data || {};
       const ltp = parseFloat(String(data.ltp || data.last_price || 0));

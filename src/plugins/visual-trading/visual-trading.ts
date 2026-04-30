@@ -223,10 +223,14 @@ export class VisualTrading implements ISeriesPrimitive<Time> {
             const color = pnl >= 0 ? '#10B981' : '#EF4444'; // Green/Red
 
             // We pass price instead of Y coordinate to renderer
+            // TSK-CS-017: broker-style label — side arrow + net qty + avg price + PnL
+            const qty = parseInt(pos.quantity || pos.netqty || '0');
+            const side = qty >= 0 ? '▲' : '▼';
+            const absQty = Math.abs(qty);
             return {
                 price: price,
                 color,
-                text: `${pos.quantity} ${pos.symbol} @ ${price} (${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)})`,
+                text: `${side} ${absQty} @ ₹${price.toFixed(2)}  ${pnl >= 0 ? '+' : ''}₹${pnl.toFixed(0)}`,
                 lineWidth: 2
             };
         }).filter(p => p !== null);
@@ -266,15 +270,17 @@ export class VisualTrading implements ISeriesPrimitive<Time> {
             const orderTypeLabel = isSLOrder ? ` ${order.pricetype}` : '';
             const priceLabel = isSLOrder ? `@ ${price.toFixed(2)} (trigger)` : `@ ${price.toFixed(2)}`;
 
+            // TSK-CS-017: broker-style label — side icon + qty + price
+            const actionIcon = order.action === 'BUY' ? '▲' : '▼';
             return {
                 id: order.orderid || order.order_id,
-                price: price, // Use price instead of Y
+                price: price,
                 color,
-                text: `${order.action}${orderTypeLabel} ${order.quantity} ${priceLabel}`,
+                text: `${actionIcon}${orderTypeLabel} ${order.quantity} ${priceLabel}`,
                 hovered,
                 hoverRemove: hovered && this._hoveredRemove,
-                lineWidth: 1,
-                lineStyle: [4, 4] // Dashed
+                lineWidth: isSLOrder ? 2 : 1,
+                lineStyle: isSLOrder ? [2, 2] : [4, 4] // SL = tighter dash, LIMIT = wider dash
             };
         }).filter(p => p !== null);
 

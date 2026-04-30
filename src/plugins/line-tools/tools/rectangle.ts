@@ -63,8 +63,6 @@ class RectanglePaneRenderer implements IPrimitivePaneRenderer {
             // Draw rectangle
             ctx.lineWidth = this._options.width;
             ctx.strokeStyle = this._options.lineColor;
-            ctx.lineWidth = this._options.width;
-            ctx.strokeStyle = this._options.lineColor;
             ctx.fillStyle = this._options.backgroundColor;
             setLineStyle(ctx, this._options.lineStyle);
 

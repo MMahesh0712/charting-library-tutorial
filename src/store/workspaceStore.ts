@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, subscribeWithSelector } from 'zustand/middleware';
 import logger from '@/utils/logger';
 import { getJSON, STORAGE_KEYS } from '../services/storageService';
+import { normalizeSymbolExchange } from '../utils/symbolNormalization';
 import type { ChartConfig, Indicator, LayoutType } from '@/types/domain';
 import type { IChartApi } from 'lightweight-charts';
 
@@ -87,13 +88,17 @@ function loadInitialState(): WorkspaceState {
   } | null;
 
   if (oldData) {
-    const migratedCharts = (oldData.charts || []).map((chart) => ({
+    const migratedCharts = (oldData.charts || []).map((chart) => {
+      // Normalize symbol/exchange to canonical form (removes NIFTY→'NIFTY 50', NSE_INDEX→'NSE' mismatches)
+      const { symbol: normalizedSymbol, exchange: normalizedExchange } =
+        normalizeSymbolExchange(chart.symbol || 'NIFTY 50', chart.exchange || 'NSE');
+      return {
+        ...chart,
+        symbol: normalizedSymbol,
+        exchange: normalizedExchange,
+      };
+    }).map((chart) => ({
       ...chart,
-      symbol: chart.symbol === 'NIFTY 50' ? 'NIFTY' : chart.symbol,
-      exchange:
-        chart.symbol === 'NIFTY 50' || chart.symbol === 'NIFTY'
-          ? 'NSE_INDEX'
-          : chart.exchange,
       indicators: migrateIndicators(chart.indicators || []).map((ind) => {
         if (ind.type === ('classic' as Indicator['type'])) {
           return { ...ind, type: 'pivotPoints' as const, pivotType: 'classic' };
@@ -111,8 +116,8 @@ function loadInitialState(): WorkspaceState {
           : [
               {
                 id: 1,
-                symbol: 'NIFTY',
-                exchange: 'NSE_INDEX',
+                symbol: 'NIFTY 50',
+                exchange: 'NSE',
                 interval: 'D',
                 indicators: [],
               } as ChartConfig,
@@ -127,8 +132,8 @@ function loadInitialState(): WorkspaceState {
     charts: [
       {
         id: 1,
-        symbol: 'NIFTY',
-        exchange: 'NSE_INDEX',
+        symbol: 'NIFTY 50',
+        exchange: 'NSE',
         interval: 'D',
         indicators: [],
       } as ChartConfig,
@@ -248,26 +253,28 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
               return state;
             }
 
-            const migratedCharts = (layoutData.charts || []).map((chart) => ({
-              ...chart,
-              symbol: chart.symbol === 'NIFTY 50' ? 'NIFTY' : chart.symbol,
-              exchange:
-                chart.symbol === 'NIFTY 50' || chart.symbol === 'NIFTY'
-                  ? 'NSE_INDEX'
-                  : chart.exchange,
-              indicators: migrateIndicators(chart.indicators || []).map(
-                (ind) => {
-                  if (ind.type === ('classic' as Indicator['type'])) {
-                    return {
-                      ...ind,
-                      type: 'pivotPoints' as const,
-                      pivotType: 'classic',
-                    };
+            const migratedCharts = (layoutData.charts || []).map((chart) => {
+              // Normalize symbol/exchange to canonical form
+              const { symbol: normalizedSymbol, exchange: normalizedExchange } =
+                normalizeSymbolExchange(chart.symbol || 'NIFTY 50', chart.exchange || 'NSE');
+              return {
+                ...chart,
+                symbol: normalizedSymbol,
+                exchange: normalizedExchange,
+                indicators: migrateIndicators(chart.indicators || []).map(
+                  (ind) => {
+                    if (ind.type === ('classic' as Indicator['type'])) {
+                      return {
+                        ...ind,
+                        type: 'pivotPoints' as const,
+                        pivotType: 'classic',
+                      };
+                    }
+                    return ind;
                   }
-                  return ind;
-                }
-              ),
-            })) as ChartConfig[];
+                ),
+              };
+            }) as ChartConfig[];
 
             if (migratedCharts.length === 0) {
               return state;
@@ -292,18 +299,15 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         name: 'openalgo-workspace-storage',
         storage: createJSONStorage(() => localStorage),
         version: 1,
-        migrate: (persistedState, version) => {
+        migrate: (persistedState) => {
           const state = persistedState as WorkspaceState;
-          if (version === 0) {
-            state.charts = (state.charts || []).map((chart) => ({
-              ...chart,
-              symbol: chart.symbol === 'NIFTY 50' ? 'NIFTY' : chart.symbol,
-              exchange:
-                chart.symbol === 'NIFTY 50' || chart.symbol === 'NIFTY'
-                  ? 'NSE_INDEX'
-                  : chart.exchange,
-            }));
-          }
+          // v0→v1: Normalize all symbol/exchange to canonical form
+          // (fixes NIFTY→'NIFTY 50', NSE_INDEX→'NSE' mismatches from old storage)
+          state.charts = (state.charts || []).map((chart) => {
+            const { symbol: s, exchange: e } =
+              normalizeSymbolExchange(chart.symbol || 'NIFTY 50', chart.exchange || 'NSE');
+            return { ...chart, symbol: s, exchange: e };
+          });
           return state;
         },
         partialize: (state) => ({

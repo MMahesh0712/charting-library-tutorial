@@ -40,7 +40,8 @@ export const saveDrawings = async (
   symbol: string,
   exchange: string = 'NSE',
   interval: string = '1d',
-  drawings: Drawing[]
+  drawings: Drawing[],
+  chartId?: string
 ): Promise<boolean> => {
   try {
     const apiKey = getApiKey();
@@ -49,8 +50,10 @@ export const saveDrawings = async (
       return false;
     }
 
-    // Create a unique key for this symbol/exchange/interval combination
-    const drawingsKey = `drawings_${symbol}_${exchange}_${interval}`;
+    // TSK-CS-012: Include chartId in key so multi-chart same-symbol doesn't collide
+    const keyParts = ['drawings', symbol, exchange, interval];
+    if (chartId) keyParts.push(chartId);
+    const drawingsKey = keyParts.join('_');
 
     const response = await fetch(`${getApiBase()}/chart`, {
       method: 'POST',
@@ -93,9 +96,13 @@ export const saveDrawings = async (
 export const loadDrawings = async (
   symbol: string,
   exchange: string = 'NSE',
-  interval: string = '1d'
+  interval: string = '1d',
+  chartId?: string
 ): Promise<Drawing[] | null> => {
-  const drawingsKey = `drawings_${symbol}_${exchange}_${interval}`;
+  // TSK-CS-012: Include chartId in key so multi-chart same-symbol doesn't collide
+  const keyParts = ['drawings', symbol, exchange, interval];
+  if (chartId) keyParts.push(chartId);
+  const drawingsKey = keyParts.join('_');
 
   // First, check if CloudSync has already loaded data (stored in global cache)
   if (window._chartPrefsCache && window._chartPrefsCache[drawingsKey]) {

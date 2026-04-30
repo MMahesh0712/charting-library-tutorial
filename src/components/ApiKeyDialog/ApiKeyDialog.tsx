@@ -4,7 +4,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { BaseModal, BaseButton } from '../shared';
 import { get, set } from '../../services/storageService';
 
-const DEFAULT_HOST = 'http://127.0.0.1:5000';
+const DEFAULT_HOST = 'http://localhost:8000';
 
 export interface ApiKeyDialogProps {
     onSave: (apiKey: string) => void;
@@ -15,7 +15,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({ onSave, onClose }) => {
     const [hostUrl, setHostUrl] = useState(() => {
         return get('oa_host_url') || DEFAULT_HOST;
     });
-    const [apiKey, setApiKey] = useState('');
+    const [apiKey, setApiKey] = useState('PD_DUMMY_KEY'); // Auto-fill with dummy key for local use
     const [showApiKey, setShowApiKey] = useState(false);
     const [error, setError] = useState('');
     const [isValidating, setIsValidating] = useState(false);
@@ -36,39 +36,26 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({ onSave, onClose }) => {
 
             // For local development, use relative path to leverage Vite proxy
             const isLocalhost = hostUrl === DEFAULT_HOST ||
+                hostUrl === 'http://localhost:8000' ||
+                hostUrl === 'http://127.0.0.1:8000' ||
                 hostUrl === 'http://localhost:5000' ||
                 hostUrl === 'http://127.0.0.1:5000';
+            
             const apiUrl = isLocalhost
-                ? `/api/v1/chart?apikey=${encodeURIComponent(apiKey.trim())}`
-                : `${hostUrl}/api/v1/chart?apikey=${encodeURIComponent(apiKey.trim())}`;
+                ? `/api/v1/intervals` // Just check if server is up
+                : `${hostUrl}/api/v1/intervals`;
 
-            // Validate API key and fetch preferences in one request
             const response = await fetch(apiUrl, {
-                method: 'GET',
-                credentials: 'include'
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ apikey: apiKey.trim() })
             });
 
             if (response.ok) {
                 // API key is valid - save API key
                 set('oa_apikey', apiKey.trim());
-
-                // Parse and save preferences directly from the validation response
-                try {
-                    const result = await response.json();
-                    const prefs = result.data || result;
-                    if (prefs && typeof prefs === 'object') {
-                        Object.entries(prefs).forEach(([key, value]) => {
-                            if (value !== null && value !== undefined) {
-                                set(key, value as string);
-                            }
-                        });
-                        // Mark that cloud data has been loaded to skip cloud sync
-                        set('_cloud_sync_done', 'true');
-                    }
-                } catch (parseError) {
-                    console.warn('[ApiKeyDialog] Could not parse preferences, cloud sync will handle it');
-                }
-
+                set('_cloud_sync_done', 'true');
                 onSave(apiKey.trim());
             } else if (response.status === 400 || response.status === 401 || response.status === 403) {
                 setError('Invalid API key. Please check your credentials and try again.');
@@ -77,7 +64,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({ onSave, onClose }) => {
             }
         } catch (err) {
             console.error('[ApiKeyDialog] Validation error:', err);
-            setError('Could not connect to OpenAlgo server. Please check if the server is running.');
+            setError('Could not connect to Pratham Dhan server. Please check if Data-Hub is running on port 8000.');
         } finally {
             setIsValidating(false);
         }
@@ -114,7 +101,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({ onSave, onClose }) => {
         <BaseModal
             isOpen={true}
             onClose={onClose || (() => {})}
-            title="Connect to OpenAlgo"
+            title="Connect to Pratham Dhan"
             showCloseButton={!!onClose}
             closeOnOverlayClick={!!onClose}
             closeOnEscape={!!onClose}
@@ -126,23 +113,23 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({ onSave, onClose }) => {
                 fontSize: '13px',
                 lineHeight: 1.5
             }}>
-                Configure your OpenAlgo server connection.
+                Configure your Pratham Dhan server connection.
             </p>
 
             <form onSubmit={handleSubmit} id="apikey-form">
                 {/* Host URL Field */}
                 <div style={{ marginBottom: '16px' }}>
-                    <label style={labelStyle}>Host URL</label>
+                    <label style={labelStyle}>Data Hub URL</label>
                     <input
                         type="text"
                         value={hostUrl}
                         onChange={(e: ChangeEvent<HTMLInputElement>) => setHostUrl(e.target.value)}
-                        placeholder="http://127.0.0.1:5000"
+                        placeholder="http://localhost:8000"
                         style={inputStyle}
                         className="focusable-input"
                     />
                     <p style={hintStyle}>
-                        Default: http://127.0.0.1:5000
+                        Default: http://localhost:8000
                     </p>
                 </div>
 
@@ -197,15 +184,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({ onSave, onClose }) => {
                         </p>
                     )}
                     <p style={hintStyle}>
-                        Find your API key in the{' '}
-                        <a
-                            href={`${hostUrl}/apikey`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ color: 'var(--tv-color-brand)' }}
-                        >
-                            OpenAlgo Dashboard
-                        </a>
+                        Use any key for local connection (e.g. PD_DUMMY_KEY)
                     </p>
                 </div>
 
@@ -215,18 +194,6 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({ onSave, onClose }) => {
                     justifyContent: 'flex-end',
                     alignItems: 'center'
                 }}>
-                    <a
-                        href={`${hostUrl}/auth/login`}
-                        style={{
-                            color: 'var(--tv-color-text-secondary)',
-                            fontSize: '14px',
-                            textDecoration: 'none',
-                            marginRight: 'auto'
-                        }}
-                    >
-                        Login to Dashboard
-                    </a>
-
                     <BaseButton
                         type="submit"
                         variant="primary"

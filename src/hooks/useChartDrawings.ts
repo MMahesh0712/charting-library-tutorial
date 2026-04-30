@@ -43,7 +43,8 @@ export const useChartDrawings = (
   symbol: string,
   exchange: string,
   interval: string,
-  onDrawingsSync?: OnDrawingsSyncFn
+  onDrawingsSync?: OnDrawingsSyncFn,
+  chartId?: string
 ): void => {
   // Keep track of the current manager to ensure we don't attach listeners multiple times
   const managerRef = useRef<LineToolManager | null>(null);
@@ -62,7 +63,7 @@ export const useChartDrawings = (
     const loadSavedDrawings = async () => {
       logger.debug('[ChartComponent] loadSavedDrawings called for:', symbol, exchange, interval);
       try {
-        const drawings = (await loadDrawings(symbol, exchange, interval)) as Drawing[] | null;
+        const drawings = (await loadDrawings(symbol, exchange, interval, chartId)) as Drawing[] | null;
         if (!isMounted) return; // Abort if unmounted
 
         logger.debug('[ChartComponent] loadDrawings result:', drawings);
@@ -97,7 +98,7 @@ export const useChartDrawings = (
         try {
           if (manager.exportDrawings) {
             const drawings = manager.exportDrawings();
-            await saveDrawings(symbol, exchange, interval, drawings);
+            await saveDrawings(symbol, exchange, interval, drawings, chartId);
             logger.debug('[ChartComponent] Auto-saved', drawings.length, 'drawings');
           }
         } catch (error) {
@@ -130,7 +131,7 @@ export const useChartDrawings = (
         manager.setOnDrawingsChanged(null);
       }
     };
-  }, [manager, symbol, exchange, interval, onDrawingsSync]);
+  }, [manager, symbol, exchange, interval, onDrawingsSync, chartId]);
 };
 
 export default useChartDrawings;

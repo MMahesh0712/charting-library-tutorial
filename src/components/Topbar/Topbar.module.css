@@ -146,6 +146,16 @@
     text-transform: uppercase;
 }
 
+.exchangeLabel {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--tv-color-text-secondary, #888);
+    text-transform: uppercase;
+    margin-left: 2px;
+    opacity: 0.75;
+    letter-spacing: 0.3px;
+}
+
 /* Specific Button Styles */
 .symbolButton {
     font-weight: 600;

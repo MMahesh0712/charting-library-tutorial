@@ -1,0 +1,350 @@
+/* AutoWatchlistTab — Active Markets Panel Styles */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+  background: var(--header-bg, rgba(255, 255, 255, 0.02));
+}
+
+.headerTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.headerIcon {
+  color: #ffca28;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lastUpdated {
+  font-size: 10px;
+  color: var(--text-tertiary, #666);
+}
+
+.refreshBtn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s, background 0.2s;
+}
+
+.refreshBtn:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.refreshBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Error Bar */
+.errorBar {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: #ef5350;
+  background: rgba(239, 83, 80, 0.08);
+  border-bottom: 1px solid rgba(239, 83, 80, 0.15);
+}
+
+/* Section */
+.section {
+  padding: 8px 0;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sectionCount {
+  margin-left: auto;
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 8px;
+  color: var(--text-tertiary, #666);
+}
+
+/* Index Grid */
+.indexGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  padding: 0 8px;
+}
+
+.indexCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.indexCard:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.indexCard.active {
+  background: rgba(38, 166, 154, 0.1);
+  border-color: rgba(38, 166, 154, 0.3);
+}
+
+.indexName {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.indexExchange {
+  font-size: 10px;
+  color: var(--text-tertiary, #666);
+  margin-top: 2px;
+}
+
+
+/* TSK-CS-020: Live index data classes */
+.indexLtp {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+  margin-top: 2px;
+  letter-spacing: -0.3px;
+}
+
+.indexChange {
+  font-size: 10px;
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+.positive {
+  color: #26a69a;
+}
+
+.negative {
+  color: #ef5350;
+}
+
+/* Options */
+.underlyingGroup {
+  margin-bottom: 4px;
+}
+
+.underlyingLabel {
+  padding: 4px 12px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary, #555);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Underlying header (clickable index row above option list) ── */
+.underlyingHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 3px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s;
+}
+
+.underlyingHeader:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.underlyingName {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary, #aaa);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.underlyingDivider {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  margin: 0 4px;
+}
+
+.underlyingLtp {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary, #aaa);
+  white-space: nowrap;
+}
+
+.underlyingChangePct {
+  font-size: 10px;
+  font-weight: 500;
+  margin-left: 3px;
+  opacity: 0.85;
+}
+
+/* ── ATM row highlight ── */
+.atmRow {
+  background: rgba(38, 166, 154, 0.06);
+}
+
+.atmRow:hover {
+  background: rgba(38, 166, 154, 0.12);
+}
+
+.atmMarker {
+  font-size: 8px;
+  color: #26a69a;
+  min-width: 10px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.atmStrike {
+  color: var(--text-primary, #e0e0e0) !important;
+  font-weight: 700;
+}
+
+/* ── Option price columns ── */
+.optLtp {
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: auto;
+  min-width: 44px;
+  text-align: right;
+  color: var(--text-primary, #e0e0e0);
+  letter-spacing: -0.2px;
+}
+
+.optChange {
+  font-size: 10px;
+  font-weight: 500;
+  min-width: 40px;
+  text-align: right;
+}
+
+.optionsList {
+  display: flex;
+  flex-direction: column;
+}
+
+.optionItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.optionItem:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.optionItem.active {
+  background: rgba(38, 166, 154, 0.08);
+}
+
+.optSymbol {
+  flex: 1;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: var(--text-primary, #e0e0e0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.optType {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.ceType {
+  color: #26a69a;
+  background: rgba(38, 166, 154, 0.1);
+}
+
+.peType {
+  color: #ef5350;
+  background: rgba(239, 83, 80, 0.1);
+}
+
+.optStrike {
+  font-size: 11px;
+  color: var(--text-secondary, #999);
+  min-width: 50px;
+  text-align: right;
+}
+
+/* Empty / Loading States */
+.emptyState,
+.loadingState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 12px;
+  color: var(--text-tertiary, #666);
+  font-size: 11px;
+}

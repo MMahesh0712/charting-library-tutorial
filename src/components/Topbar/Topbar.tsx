@@ -48,6 +48,7 @@ interface ExpandedSections {
 
 export interface TopbarProps {
     symbol: string;
+    exchange?: string;
     interval: string;
     chartType: string;
     indicators: unknown[];
@@ -90,7 +91,7 @@ export interface TopbarProps {
 }
 
 const Topbar: React.FC<TopbarProps> = ({
-    symbol, interval, chartType, indicators, favoriteIntervals, customIntervals,
+    symbol, exchange, interval, chartType, indicators, favoriteIntervals, customIntervals,
     lastNonFavoriteInterval,
     onSymbolClick, onIntervalChange, onChartTypeChange, onToggleIndicator,
     onToggleFavorite, onAddCustomInterval, onRemoveCustomInterval,
@@ -253,20 +254,24 @@ const Topbar: React.FC<TopbarProps> = ({
                     const supported = new Set<string>();
 
                     if (data.seconds) data.seconds.forEach((v: string) => supported.add(v));
-                    if (data.minutes) data.minutes.forEach((v: string) => supported.add(v));
-                    if (data.hours) data.hours.forEach((v: string) => supported.add(v));
+                    if (data.minutes) data.minutes.forEach((v: string) => {
+                        supported.add(v === '60' ? '1h' : (v.endsWith('m') ? v : v + 'm'));
+                    });
+                    if (data.hours) data.hours.forEach((v: string) => {
+                        supported.add(v.endsWith('h') ? v : v + 'h');
+                    });
                     if (data.days) data.days.forEach((v: string) => {
-                        supported.add(v === 'D' ? '1d' : v);
+                        supported.add(v === 'D' || v === '1' ? '1d' : (v.endsWith('d') ? v : v + 'd'));
                     });
                     if (data.weeks) data.weeks.forEach((v: string) => {
-                        supported.add(v === 'W' ? '1w' : v);
+                        supported.add(v === 'W' || v === '1' ? '1w' : (v.endsWith('w') ? v : v + 'w'));
                     });
                     if (data.months) data.months.forEach((v: string) => {
-                        supported.add(v === 'M' ? '1M' : v);
+                        supported.add(v === 'M' || v === '1' ? '1M' : (v.endsWith('M') ? v : v + 'M'));
                     });
 
                     setBrokerIntervals(supported);
-                    logger.debug('[Topbar] Broker supported intervals:', [...supported]);
+                    logger.debug('[Topbar] Normalized broker intervals:', [...supported]);
                 } else {
                     setIntervalsError('Could not fetch broker intervals');
                 }
@@ -477,6 +482,9 @@ const Topbar: React.FC<TopbarProps> = ({
                                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><path fill="currentColor" d="M3.5 8a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM8 2a6 6 0 1 0 3.65 10.76l3.58 3.58 1.06-1.06-3.57-3.57A6 6 0 0 0 8 2Z"></path></svg>
                                                     </div>
                                                     <div className={classNames(styles.text, styles.uppercase)}>{symbol}</div>
+                                                    {exchange && (
+                                                        <div className={classNames(styles.text, styles.exchangeLabel)}>{exchange}</div>
+                                                    )}
                                                 </button>
                                                 <button
                                                     className={classNames(styles.button, styles.iconButton)}
