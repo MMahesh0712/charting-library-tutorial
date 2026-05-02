@@ -94,6 +94,7 @@ function fromTvResolution(resolution: string): string {
     '15': '15m',
     '30': '30m',
     '60': '1h',
+    D: '1d',
     '1D': '1d',
     '1W': '1w',
     '1M': '1M',
