@@ -5,6 +5,8 @@
 
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import { set, STORAGE_KEYS } from '../services/storageService';
+import type { ChartEngine } from '../services/tradingViewConfig';
+import { normalizeTradingViewLibraryPath } from '../services/tradingViewConfig';
 import { CHART_COLORS } from '../utils/colorUtils';
 
 // ==================== TYPES ====================
@@ -155,6 +157,8 @@ export interface UseUIHandlersParams {
   setWebsocketUrl: Dispatch<SetStateAction<string>>;
   setHostUrl: Dispatch<SetStateAction<string>>;
   setOpenalgoUsername: Dispatch<SetStateAction<string>>;
+  setChartEngine: Dispatch<SetStateAction<ChartEngine>>;
+  setTradingViewLibraryPath: Dispatch<SetStateAction<string>>;
   // Toast
   showToast: ShowToastFn;
 }
@@ -182,6 +186,8 @@ export interface UseUIHandlersReturn {
   handleWebsocketUrlSave: (newUrl: string) => void;
   handleHostUrlSave: (newUrl: string) => void;
   handleUsernameSave: (newUsername: string) => void;
+  handleChartEngineSave: (newEngine: ChartEngine) => void;
+  handleTradingViewLibraryPathSave: (newPath: string) => void;
 }
 
 // ==================== CONSTANTS ====================
@@ -258,6 +264,8 @@ export const useUIHandlers = ({
   setWebsocketUrl,
   setHostUrl,
   setOpenalgoUsername,
+  setChartEngine,
+  setTradingViewLibraryPath,
   // Toast
   showToast,
 }: UseUIHandlersParams): UseUIHandlersReturn => {
@@ -500,6 +508,23 @@ export const useUIHandlers = ({
     [setOpenalgoUsername]
   );
 
+  const handleChartEngineSave = useCallback(
+    (newEngine: ChartEngine) => {
+      setChartEngine(newEngine);
+      set(STORAGE_KEYS.CHART_ENGINE, newEngine);
+    },
+    [setChartEngine]
+  );
+
+  const handleTradingViewLibraryPathSave = useCallback(
+    (newPath: string) => {
+      const normalized = normalizeTradingViewLibraryPath(newPath);
+      setTradingViewLibraryPath(normalized);
+      set(STORAGE_KEYS.TV_LIBRARY_PATH, normalized);
+    },
+    [setTradingViewLibraryPath]
+  );
+
   return {
     handleRightPanelToggle,
     handleSettingsClick,
@@ -522,6 +547,8 @@ export const useUIHandlers = ({
     handleWebsocketUrlSave,
     handleHostUrlSave,
     handleUsernameSave,
+    handleChartEngineSave,
+    handleTradingViewLibraryPathSave,
   };
 };
 

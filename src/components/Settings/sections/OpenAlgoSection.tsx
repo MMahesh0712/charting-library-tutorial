@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import styles from '../SettingsPopup.module.css';
+import { getDefaultHostUrl, getDefaultWebSocketHost } from '../../../services/api/config';
 
 export interface OpenAlgoSectionProps {
     localHostUrl: string;
@@ -16,6 +17,10 @@ export interface OpenAlgoSectionProps {
     setLocalWsUrl: (url: string) => void;
     localUsername: string;
     setLocalUsername: (username: string) => void;
+    localChartEngine: 'legacy' | 'tradingview';
+    setLocalChartEngine: (engine: 'legacy' | 'tradingview') => void;
+    localTradingViewLibraryPath: string;
+    setLocalTradingViewLibraryPath: (path: string) => void;
 }
 
 const OpenAlgoSection: React.FC<OpenAlgoSectionProps> = ({
@@ -27,6 +32,10 @@ const OpenAlgoSection: React.FC<OpenAlgoSectionProps> = ({
     setLocalWsUrl,
     localUsername,
     setLocalUsername,
+    localChartEngine,
+    setLocalChartEngine,
+    localTradingViewLibraryPath,
+    setLocalTradingViewLibraryPath,
 }) => {
     const [showApiKey, setShowApiKey] = useState(false);
 
@@ -40,11 +49,11 @@ const OpenAlgoSection: React.FC<OpenAlgoSectionProps> = ({
                     type="text"
                     value={localHostUrl}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => setLocalHostUrl(e.target.value)}
-                    placeholder="http://127.0.0.1:5000"
+                    placeholder={getDefaultHostUrl()}
                     className={styles.input}
                 />
                 <p className={styles.inputHint}>
-                    Default: http://127.0.0.1:5000. Change to use a custom OpenAlgo server URL.
+                    Default: {getDefaultHostUrl()}. On VPS, keep this on the same app origin unless Data Hub is hosted elsewhere.
                 </p>
             </div>
 
@@ -86,11 +95,40 @@ const OpenAlgoSection: React.FC<OpenAlgoSectionProps> = ({
                     type="text"
                     value={localWsUrl}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => setLocalWsUrl(e.target.value)}
-                    placeholder="127.0.0.1:8765"
+                    placeholder={getDefaultWebSocketHost()}
                     className={styles.input}
                 />
                 <p className={styles.inputHint}>
-                    Default: 127.0.0.1:8765. Change to use a custom domain (e.g., openalgo.example.com:8765)
+                    Default: {getDefaultWebSocketHost()}. Leave this on the app host for VPS unless WebSocket is exposed separately.
+                </p>
+            </div>
+
+            <div className={styles.inputGroup}>
+                <label className={styles.inputLabel}>Chart Engine</label>
+                <select
+                    value={localChartEngine}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setLocalChartEngine(e.target.value as 'legacy' | 'tradingview')}
+                    className={styles.input}
+                >
+                    <option value="legacy">Legacy Chart</option>
+                    <option value="tradingview">TradingView Advanced Chart</option>
+                </select>
+                <p className={styles.inputHint}>
+                    Use Legacy while migrating. Switch to TradingView after library files are available on the same app host.
+                </p>
+            </div>
+
+            <div className={styles.inputGroup}>
+                <label className={styles.inputLabel}>TradingView Library Path</label>
+                <input
+                    type="text"
+                    value={localTradingViewLibraryPath}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setLocalTradingViewLibraryPath(e.target.value)}
+                    placeholder="/charting_library/"
+                    className={styles.input}
+                />
+                <p className={styles.inputHint}>
+                    VPS-safe default: /charting_library/. Keep TradingView static files on the same host and port when possible.
                 </p>
             </div>
 

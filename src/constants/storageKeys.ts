@@ -19,6 +19,8 @@ export const STORAGE_KEYS = {
   CUSTOM_INTERVALS: 'tv_custom_intervals',
   CHART_APPEARANCE: 'tv_chart_appearance',
   SAVED_LAYOUT: 'tv_saved_layout',
+  CHART_ENGINE: 'tv_chart_engine',
+  TV_LIBRARY_PATH: 'tv_library_path',
 
   // Alerts
   ALERTS: 'tv_alerts',

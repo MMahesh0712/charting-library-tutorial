@@ -7,6 +7,7 @@ import ShortcutsSettings from '../ShortcutsSettings/ShortcutsSettings';
 import { getLogLevel } from '../../utils/logger';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useKeyboardNav } from '../../hooks/useKeyboardNav';
+import { getDefaultHostUrl, getDefaultWebSocketHost } from '../../services/api/config';
 
 // Import extracted section components
 import { ScalesSection, OpenAlgoSection, LoggingSection, AppearanceSection, SymbolSection } from './sections';
@@ -41,6 +42,10 @@ export interface SettingsPopupProps {
     onWebsocketUrlSave?: (url: string) => void;
     openalgoUsername?: string;
     onUsernameSave?: (username: string) => void;
+    chartEngine?: 'legacy' | 'tradingview';
+    onChartEngineSave?: (engine: 'legacy' | 'tradingview') => void;
+    tradingViewLibraryPath?: string;
+    onTradingViewLibraryPathSave?: (path: string) => void;
     // Chart Appearance settings
     chartAppearance?: ChartAppearance;
     onChartAppearanceChange?: (appearance: ChartAppearance) => void;
@@ -57,14 +62,18 @@ const SettingsPopup: FC<SettingsPopupProps> = ({
     isSessionBreakVisible = false,
     onSessionBreakToggle,
     // OpenAlgo settings
-    hostUrl = 'http://127.0.0.1:5000',
+    hostUrl = getDefaultHostUrl(),
     onHostUrlSave,
     apiKey = '',
     onApiKeySave,
-    websocketUrl = '127.0.0.1:8765',
+    websocketUrl = getDefaultWebSocketHost(),
     onWebsocketUrlSave,
     openalgoUsername = '',
     onUsernameSave,
+    chartEngine = 'legacy',
+    onChartEngineSave,
+    tradingViewLibraryPath = '/charting_library/',
+    onTradingViewLibraryPathSave,
     // Chart Appearance settings
     chartAppearance = DEFAULT_CHART_APPEARANCE,
     onChartAppearanceChange,
@@ -77,6 +86,8 @@ const SettingsPopup: FC<SettingsPopupProps> = ({
     const [localApiKey, setLocalApiKey] = useState(apiKey);
     const [localWsUrl, setLocalWsUrl] = useState(websocketUrl);
     const [localUsername, setLocalUsername] = useState(openalgoUsername);
+    const [localChartEngine, setLocalChartEngine] = useState(chartEngine);
+    const [localTradingViewLibraryPath, setLocalTradingViewLibraryPath] = useState(tradingViewLibraryPath);
     const [hasChanges, setHasChanges] = useState(false);
     const [localAppearance, setLocalAppearance] = useState<ChartAppearance>(chartAppearance);
 
@@ -86,9 +97,11 @@ const SettingsPopup: FC<SettingsPopupProps> = ({
         setLocalApiKey(apiKey);
         setLocalWsUrl(websocketUrl);
         setLocalUsername(openalgoUsername);
+        setLocalChartEngine(chartEngine);
+        setLocalTradingViewLibraryPath(tradingViewLibraryPath);
         setLocalAppearance(chartAppearance);
         onClose();
-    }, [hostUrl, apiKey, websocketUrl, openalgoUsername, chartAppearance, onClose]);
+    }, [hostUrl, apiKey, websocketUrl, openalgoUsername, chartEngine, tradingViewLibraryPath, chartAppearance, onClose]);
 
     // Focus trap for accessibility
     const focusTrapRef = useFocusTrap(isOpen);
@@ -117,6 +130,14 @@ const SettingsPopup: FC<SettingsPopupProps> = ({
     }, [openalgoUsername]);
 
     useEffect(() => {
+        setLocalChartEngine(chartEngine);
+    }, [chartEngine]);
+
+    useEffect(() => {
+        setLocalTradingViewLibraryPath(tradingViewLibraryPath);
+    }, [tradingViewLibraryPath]);
+
+    useEffect(() => {
         setLocalAppearance(chartAppearance);
     }, [chartAppearance]);
 
@@ -126,9 +147,11 @@ const SettingsPopup: FC<SettingsPopupProps> = ({
         const hasApiKeyChange = localApiKey !== apiKey;
         const hasWsUrlChange = localWsUrl !== websocketUrl;
         const hasUsernameChange = localUsername !== openalgoUsername;
+        const hasChartEngineChange = localChartEngine !== chartEngine;
+        const hasTradingViewLibraryPathChange = localTradingViewLibraryPath !== tradingViewLibraryPath;
         const hasAppearanceChange = JSON.stringify(localAppearance) !== JSON.stringify(chartAppearance);
-        setHasChanges(hasHostChange || hasApiKeyChange || hasWsUrlChange || hasUsernameChange || hasAppearanceChange);
-    }, [localHostUrl, localApiKey, localWsUrl, localUsername, localAppearance, hostUrl, apiKey, websocketUrl, openalgoUsername, chartAppearance]);
+        setHasChanges(hasHostChange || hasApiKeyChange || hasWsUrlChange || hasUsernameChange || hasChartEngineChange || hasTradingViewLibraryPathChange || hasAppearanceChange);
+    }, [localHostUrl, localApiKey, localWsUrl, localUsername, localChartEngine, localTradingViewLibraryPath, localAppearance, hostUrl, apiKey, websocketUrl, openalgoUsername, chartEngine, tradingViewLibraryPath, chartAppearance]);
 
     if (!isOpen) return null;
 
@@ -144,6 +167,12 @@ const SettingsPopup: FC<SettingsPopupProps> = ({
         }
         if (localUsername !== openalgoUsername) {
             onUsernameSave?.(localUsername);
+        }
+        if (localChartEngine !== chartEngine) {
+            onChartEngineSave?.(localChartEngine);
+        }
+        if (localTradingViewLibraryPath !== tradingViewLibraryPath) {
+            onTradingViewLibraryPathSave?.(localTradingViewLibraryPath);
         }
         if (JSON.stringify(localAppearance) !== JSON.stringify(chartAppearance)) {
             onChartAppearanceChange?.(localAppearance);
@@ -258,6 +287,10 @@ const SettingsPopup: FC<SettingsPopupProps> = ({
                             setLocalWsUrl={setLocalWsUrl}
                             localUsername={localUsername}
                             setLocalUsername={setLocalUsername}
+                            localChartEngine={localChartEngine}
+                            setLocalChartEngine={setLocalChartEngine}
+                            localTradingViewLibraryPath={localTradingViewLibraryPath}
+                            setLocalTradingViewLibraryPath={setLocalTradingViewLibraryPath}
                         />
                     )}
 

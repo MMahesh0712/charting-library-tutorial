@@ -1,7 +1,7 @@
 import React from 'react';
 import type { MouseEvent, MutableRefObject } from 'react';
 import styles from './ChartGrid.module.css';
-import ChartComponent from './ChartComponent';
+import ChartHost from './ChartHost';
 
 type LayoutType = '1' | '2' | '3' | '4';
 
@@ -48,6 +48,8 @@ interface ChartRef {
     [key: string]: unknown;
 }
 
+type ChartEngine = 'legacy' | 'tradingview';
+
 export interface ChartGridProps {
     charts: Chart[];
     layout: LayoutType;
@@ -60,6 +62,8 @@ export interface ChartGridProps {
     onAlertTriggered?: (chartId: string, symbol: string, exchange: string, event: AlertEvent) => void;
     onReplayModeChange?: (chartId: string, isActive: boolean) => void;
     onOHLCDataUpdate?: (data: unknown) => void;
+    chartEngine?: ChartEngine;
+    tradingViewLibraryPath?: string;
     [key: string]: unknown; // Additional chart props
 }
 
@@ -104,7 +108,7 @@ const ChartGrid: React.FC<ChartGridProps> = ({
                     className={`${styles.chartWrapper} ${activeChartId === chart.id && layout !== '1' ? styles.active : ''}`}
                     onClick={(e) => handleChartClick(e, chart.id)}
                 >
-                    <ChartComponent
+                    <ChartHost
                         ref={(el) => {
                             if (chartRefs.current) {
                                 chartRefs.current[chart.id] = el;
@@ -114,6 +118,8 @@ const ChartGrid: React.FC<ChartGridProps> = ({
                         symbol={chart.symbol}
                         exchange={chart.exchange || 'NSE'}
                         interval={chart.interval}
+                        chartEngine={chartProps.chartEngine as ChartEngine | undefined}
+                        tradingViewLibraryPath={chartProps.tradingViewLibraryPath as string | undefined}
                         onAlertsSync={onAlertsSync ? (alerts: Alert[]) => onAlertsSync(chart.id, chart.symbol, chart.exchange || 'NSE', alerts) : undefined}
                         onDrawingsSync={onDrawingsSync ? (drawings: unknown[]) => onDrawingsSync(chart.id, drawings) : undefined}
                         onAlertTriggered={onAlertTriggered ? (evt: AlertEvent) => onAlertTriggered(chart.id, chart.symbol, chart.exchange || 'NSE', evt) : undefined}

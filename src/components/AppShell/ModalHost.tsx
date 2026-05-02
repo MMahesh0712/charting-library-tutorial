@@ -113,6 +113,10 @@ export interface ModalHostProps {
   handleWebsocketUrlSave: any;
   openalgoUsername: string;
   handleUsernameSave: any;
+  chartEngine: 'legacy' | 'tradingview';
+  handleChartEngineSave: any;
+  tradingViewLibraryPath: string;
+  handleTradingViewLibraryPathSave: any;
   chartAppearance: any;
   handleChartAppearanceChange: any;
   handleResetChartAppearance: any;
@@ -236,6 +240,10 @@ const ModalHost: React.FC<ModalHostProps> = ({
   handleWebsocketUrlSave,
   openalgoUsername,
   handleUsernameSave,
+  chartEngine,
+  handleChartEngineSave,
+  tradingViewLibraryPath,
+  handleTradingViewLibraryPathSave,
   chartAppearance,
   handleChartAppearanceChange,
   handleResetChartAppearance,
@@ -408,6 +416,10 @@ const ModalHost: React.FC<ModalHostProps> = ({
             onWebsocketUrlSave={handleWebsocketUrlSave}
             openalgoUsername={openalgoUsername}
             onUsernameSave={handleUsernameSave}
+            chartEngine={chartEngine}
+            onChartEngineSave={handleChartEngineSave}
+            tradingViewLibraryPath={tradingViewLibraryPath}
+            onTradingViewLibraryPathSave={handleTradingViewLibraryPathSave}
             chartAppearance={chartAppearance}
             onChartAppearanceChange={handleChartAppearanceChange}
             onResetChartAppearance={handleResetChartAppearance}

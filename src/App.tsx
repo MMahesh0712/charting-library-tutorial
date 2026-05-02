@@ -43,6 +43,8 @@ import { useChart } from './hooks/useChart';
 import { useWatchlistFeed } from './hooks/useWatchlistFeed';
 import ModalHost from './components/AppShell/ModalHost';
 import RightPanelHost from './components/AppShell/RightPanelHost';
+import { getChartEngine, getTradingViewLibraryPath } from './services/tradingViewConfig';
+import { getDefaultHostUrl, getDefaultWebSocketHost } from './services/api/config';
 
 import AccountPanel from './components/AccountPanel/AccountPanel';
 
@@ -764,17 +766,19 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   // Settings Modal State (isSettingsOpen, isIndicatorSettingsOpen now from UIContext)
   const [editingIndicator, setEditingIndicator] = useState(null);
   const [websocketUrl, setWebsocketUrl] = useState(() => {
-    return getString(STORAGE_KEYS.OA_WS_URL, '127.0.0.1:8765'); // TSK-CS-023
+    return getString(STORAGE_KEYS.OA_WS_URL, getDefaultWebSocketHost()); // TSK-CS-023
   });
   const [apiKey, setApiKey] = useState(() => {
     return getString(STORAGE_KEYS.OA_API_KEY, ''); // TSK-CS-023
   });
   const [hostUrl, setHostUrl] = useState(() => {
-    return getString(STORAGE_KEYS.OA_HOST_URL, 'http://127.0.0.1:5000'); // TSK-CS-023
+    return getString(STORAGE_KEYS.OA_HOST_URL, getDefaultHostUrl()); // TSK-CS-023
   });
   const [openalgoUsername, setOpenalgoUsername] = useState(() => {
     return getString(STORAGE_KEYS.OA_USERNAME, ''); // TSK-CS-023
   });
+  const [chartEngine, setChartEngine] = useState(() => getChartEngine());
+  const [tradingViewLibraryPath, setTradingViewLibraryPath] = useState(() => getTradingViewLibraryPath());
 
   // Tool handlers extracted to hook
   const {
@@ -828,7 +832,9 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
     handleApiKeySaveFromSettings,
     handleWebsocketUrlSave,
     handleHostUrlSave,
-    handleUsernameSave
+    handleUsernameSave,
+    handleChartEngineSave,
+    handleTradingViewLibraryPathSave
   } = useUIHandlers({
     setActiveRightPanel,
     setUnreadAlertCount,
@@ -854,6 +860,8 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
     setWebsocketUrl,
     setHostUrl,
     setOpenalgoUsername,
+    setChartEngine,
+    setTradingViewLibraryPath,
     showToast
   });
 
@@ -1426,6 +1434,8 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
             timeRange={currentTimeRange}
             isToolbarVisible={showDrawingToolbar}
             theme={theme}
+            chartEngine={chartEngine}
+            tradingViewLibraryPath={tradingViewLibraryPath}
             isDrawingsLocked={isDrawingsLocked}
             isDrawingsHidden={isDrawingsHidden}
             isTimerVisible={isTimerVisible}
@@ -1517,6 +1527,10 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
         handleWebsocketUrlSave={handleWebsocketUrlSave}
         openalgoUsername={openalgoUsername}
         handleUsernameSave={handleUsernameSave}
+        chartEngine={chartEngine}
+        handleChartEngineSave={handleChartEngineSave}
+        tradingViewLibraryPath={tradingViewLibraryPath}
+        handleTradingViewLibraryPathSave={handleTradingViewLibraryPathSave}
         chartAppearance={chartAppearance}
         handleChartAppearanceChange={handleChartAppearanceChange}
         handleResetChartAppearance={handleResetChartAppearance}

@@ -3,8 +3,9 @@ import type { FormEvent, ChangeEvent, CSSProperties } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { BaseModal, BaseButton } from '../shared';
 import { get, set } from '../../services/storageService';
+import { getApiBase, getDefaultHostUrl } from '../../services/api/config';
 
-const DEFAULT_HOST = 'http://localhost:8000';
+const DEFAULT_HOST = getDefaultHostUrl();
 
 export interface ApiKeyDialogProps {
     onSave: (apiKey: string) => void;
@@ -34,16 +35,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({ onSave, onClose }) => {
             // Save host URL before validation
             set('oa_host_url', hostUrl);
 
-            // For local development, use relative path to leverage Vite proxy
-            const isLocalhost = hostUrl === DEFAULT_HOST ||
-                hostUrl === 'http://localhost:8000' ||
-                hostUrl === 'http://127.0.0.1:8000' ||
-                hostUrl === 'http://localhost:5000' ||
-                hostUrl === 'http://127.0.0.1:5000';
-            
-            const apiUrl = isLocalhost
-                ? `/api/v1/intervals` // Just check if server is up
-                : `${hostUrl}/api/v1/intervals`;
+            const apiUrl = `${getApiBase()}/intervals`;
 
             const response = await fetch(apiUrl, {
                 method: 'POST',
@@ -129,7 +121,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({ onSave, onClose }) => {
                         className="focusable-input"
                     />
                     <p style={hintStyle}>
-                        Default: http://localhost:8000
+                        Default: {DEFAULT_HOST}
                     </p>
                 </div>
 
@@ -184,7 +176,7 @@ const ApiKeyDialog: React.FC<ApiKeyDialogProps> = ({ onSave, onClose }) => {
                         </p>
                     )}
                     <p style={hintStyle}>
-                        Use any key for local connection (e.g. PD_DUMMY_KEY)
+                        Use any placeholder key for direct data-hub connection, for example `PD_DUMMY_KEY`.
                     </p>
                 </div>
 

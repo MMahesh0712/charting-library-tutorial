@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:vps": "tsc -b && vite build --mode vps",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "preview": "vite preview",
+    "preview:vps": "vite preview --host 0.0.0.0 --port 7100 --strictPort",
     "type-check": "tsc --noEmit",
     "type-check:watch": "tsc --noEmit --watch",
     "test": "vitest run",
