@@ -23,6 +23,7 @@ export interface LayoutProps {
     isLeftToolbarVisible?: boolean;
     isMobile?: boolean;
     isWatchlistVisible?: boolean;
+    isRightPanelOpen?: boolean;
     onWatchlistOverlayClick?: () => void;
     watchlistWidth?: number;
     onWatchlistWidthChange?: (width: number) => void;
@@ -49,6 +50,7 @@ const Layout: React.FC<LayoutProps> = ({
     isLeftToolbarVisible = true,
     isMobile = false,
     isWatchlistVisible = true,
+    isRightPanelOpen = false,
     onWatchlistOverlayClick,
     watchlistWidth: controlledWidth,
     onWatchlistWidthChange,
@@ -166,6 +168,10 @@ const Layout: React.FC<LayoutProps> = ({
         return { height: `${accountPanelHeight}px` };
     };
 
+    const shouldRenderWatchlist = Boolean(
+        watchlist && ((isMobile && isWatchlistVisible) || (!isMobile && isRightPanelOpen))
+    );
+
     return (
         <div className={`${styles.container} ${isMobile ? styles.mobile : ''}`}>
             {/* Skip link for keyboard accessibility */}
@@ -216,7 +222,7 @@ const Layout: React.FC<LayoutProps> = ({
                 </div>
 
                 {/* Watchlist - slide-out panel on mobile, resizable on desktop */}
-                {watchlist && (
+                {shouldRenderWatchlist && (
                     <>
                         {/* Overlay for mobile - clicking closes watchlist */}
                         {isMobile && isWatchlistVisible && (

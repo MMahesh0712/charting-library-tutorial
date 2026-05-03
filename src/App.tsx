@@ -1225,6 +1225,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
         isLeftToolbarVisible={showDrawingToolbar}
         isMobile={isMobile}
         isWatchlistVisible={isWatchlistVisible}
+        isRightPanelOpen={Boolean(activeRightPanel)}
         onWatchlistOverlayClick={() => setIsWatchlistVisible(false)}
         isAccountPanelOpen={isAccountPanelOpen}
         accountPanel={

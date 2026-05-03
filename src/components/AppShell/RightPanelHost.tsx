@@ -359,7 +359,7 @@ const RightPanelHost: React.FC<RightPanelHostProps> = ({
           symbol={currentSymbol}
           exchange={currentExchange}
           isOpen={true}
-          onClose={() => setActiveRightPanel('watchlist')}
+          onClose={() => setActiveRightPanel(null)}
         />
       </Suspense>
       </ErrorBoundary>
@@ -372,7 +372,7 @@ const RightPanelHost: React.FC<RightPanelHostProps> = ({
         symbol={currentSymbol}
         exchange={currentExchange}
         isOpen={true}
-        onClose={() => setActiveRightPanel('watchlist')}
+        onClose={() => setActiveRightPanel(null)}
         showToast={showToast}
         initialAction={tradingPanelConfig.action as any}
         initialPrice={tradingPanelConfig.price}

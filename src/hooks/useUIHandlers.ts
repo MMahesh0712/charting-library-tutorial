@@ -124,7 +124,16 @@ export interface OptionChainSymbol {
 export type ShowToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
 
 /** Right panel type */
-export type RightPanelType = 'alerts' | 'watchlist' | 'account' | null;
+export type RightPanelType =
+  | 'alerts'
+  | 'watchlist'
+  | 'objectTree'
+  | 'screener'
+  | 'position_tracker'
+  | 'ann_scanner'
+  | 'dom'
+  | 'trade'
+  | null;
 
 /** Hook parameters */
 export interface UseUIHandlersParams {
