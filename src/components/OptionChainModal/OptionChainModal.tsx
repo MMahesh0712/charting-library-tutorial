@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
-import type { FC, ChangeEvent, KeyboardEvent } from 'react';
+import type { FC, KeyboardEvent } from 'react';
 import { BaseModal, Button, Text } from '../shared';
-import { X, Loader2, RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react';
-import { getOptionChain, getAvailableExpiries, UNDERLYINGS } from '../../services/optionChain';
+import { X, Loader2, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { getOptionChain, getAvailableExpiries, parseExpiryDate, UNDERLYINGS } from '../../services/optionChain';
 import { subscribeToMultiTicker, getMultiOptionGreeks } from '../../services/openalgo';
 import styles from './OptionChainModal.module.css';
 import classNames from 'classnames';
@@ -118,9 +118,11 @@ const OptionChainModal: FC<OptionChainModalProps> = ({ isOpen, onClose, onSelect
     const [focusedRow, setFocusedRow] = useState(-1);
     const [focusedCol, setFocusedCol] = useState<ColumnType>('ce');
     const [strikeCount, setStrikeCount] = useState(15);
+    const [isUnderlyingMenuOpen, setIsUnderlyingMenuOpen] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const tableBodyRef = useRef<HTMLDivElement>(null);
     const tableContainerRef = useRef<HTMLDivElement>(null);
+    const underlyingPickerRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WebSocketConnection | null>(null);
 
     // Greeks mode state
@@ -195,17 +197,47 @@ const OptionChainModal: FC<OptionChainModalProps> = ({ isOpen, onClose, onSelect
         }
     }, [isOpen, initialSymbol]);
 
-    // Parse expiry date
-    const parseExpiry = (expiryStr: string): { day: number | string; month: string; year: number } => {
-        const date = new Date(expiryStr);
-        if (!isNaN(date.getTime())) {
+    const parseExpiry = useCallback((expiryStr: string): { day: number | string; month: string; year: number } => {
+        const date = parseExpiryDate(expiryStr);
+        if (date) {
             const day = date.getDate();
             const month = date.toLocaleString('en-US', { month: 'short' });
             const year = date.getFullYear();
             return { day, month, year };
         }
         return { day: expiryStr, month: '', year: 0 };
-    };
+    }, []);
+
+    const resetUnderlyingState = useCallback((nextUnderlying: Underlying, custom = false) => {
+        setUnderlying(nextUnderlying);
+        setIsCustomSymbol(custom);
+        setSelectedExpiry(null);
+        setOptionChain(null);
+        setAvailableExpiries([]);
+        setExpiryScrollIndex(0);
+        setStrikeCount(15);
+        setIsUnderlyingMenuOpen(false);
+    }, []);
+
+    useEffect(() => {
+        if (!isUnderlyingMenuOpen) return;
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (!underlyingPickerRef.current) return;
+            if (!underlyingPickerRef.current.contains(event.target as Node)) {
+                setIsUnderlyingMenuOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isUnderlyingMenuOpen]);
+
+    useEffect(() => {
+        if (!isOpen) {
+            setIsUnderlyingMenuOpen(false);
+        }
+    }, [isOpen]);
 
     // Group expiries by month
     const groupedExpiries = useMemo((): GroupedExpiry[] => {
@@ -236,7 +268,7 @@ const OptionChainModal: FC<OptionChainModalProps> = ({ isOpen, onClose, onSelect
         });
 
         return groups;
-    }, [availableExpiries]);
+    }, [availableExpiries, parseExpiry]);
 
     // Visible groups based on scroll
     const visibleData = useMemo((): VisibleData => {
@@ -261,9 +293,9 @@ const OptionChainModal: FC<OptionChainModalProps> = ({ isOpen, onClose, onSelect
             const datesToTake = Math.min(group.dates.length - startIdx, remainingSlots);
 
             const firstDate = group.dates[startIdx];
-            const expDate = new Date(firstDate.expiry);
-            const month = expDate.toLocaleString('en-US', { month: 'short' });
-            const year = expDate.getFullYear();
+            const expDate = parseExpiryDate(firstDate.expiry);
+            const month = expDate?.toLocaleString('en-US', { month: 'short' }) || '';
+            const year = expDate?.getFullYear() || lastDisplayedYear;
 
             const showYear = year !== lastDisplayedYear;
             const monthLabel = showYear ? `${month} '${String(year).slice(-2)}` : month;
@@ -796,28 +828,54 @@ const OptionChainModal: FC<OptionChainModalProps> = ({ isOpen, onClose, onSelect
             <div className={styles.header}>
                 <div className={styles.headerLeft}>
                     <ChevronLeft size={20} className={styles.backIcon} onClick={onClose} />
-                    <select
-                        className={styles.headerSelect}
-                        value={underlying.symbol}
-                        onChange={(e: ChangeEvent<HTMLSelectElement>) => {
-                            const found = (UNDERLYINGS as Underlying[]).find(u => u.symbol === e.target.value);
-                            if (found) {
-                                setUnderlying(found);
-                                setIsCustomSymbol(false);
-                                setSelectedExpiry(null);
-                                setOptionChain(null);
-                            }
-                        }}
-                    >
-                        {isCustomSymbol && (
-                            <option key={underlying.symbol} value={underlying.symbol}>
-                                {underlying.symbol}
-                            </option>
+                    <div className={styles.underlyingPicker} ref={underlyingPickerRef}>
+                        <button
+                            type="button"
+                            className={classNames(styles.underlyingTrigger, {
+                                [styles.underlyingTriggerOpen]: isUnderlyingMenuOpen
+                            })}
+                            onClick={() => setIsUnderlyingMenuOpen(prev => !prev)}
+                            aria-expanded={isUnderlyingMenuOpen}
+                            aria-haspopup="listbox"
+                        >
+                            <span>{underlying.symbol}</span>
+                            <ChevronDown size={16} />
+                        </button>
+                        {isUnderlyingMenuOpen && (
+                            <div className={styles.underlyingMenu} role="listbox">
+                                {isCustomSymbol && !(UNDERLYINGS as Underlying[]).some(u => u.symbol === underlying.symbol) && (
+                                    <button
+                                        type="button"
+                                        className={classNames(styles.underlyingOption, styles.underlyingOptionCustom, styles.underlyingOptionActive)}
+                                        onClick={() => resetUnderlyingState(underlying, true)}
+                                        role="option"
+                                        aria-selected="true"
+                                    >
+                                        <span>{underlying.symbol}</span>
+                                        <span className={styles.underlyingMeta}>{underlying.exchange}</span>
+                                    </button>
+                                )}
+                                {(UNDERLYINGS as Underlying[]).map(u => {
+                                    const active = u.symbol === underlying.symbol;
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={u.symbol}
+                                            className={classNames(styles.underlyingOption, {
+                                                [styles.underlyingOptionActive]: active
+                                            })}
+                                            onClick={() => resetUnderlyingState(u, false)}
+                                            role="option"
+                                            aria-selected={active}
+                                        >
+                                            <span>{u.symbol}</span>
+                                            <span className={styles.underlyingMeta}>{u.exchange}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         )}
-                        {(UNDERLYINGS as Underlying[]).map(u => (
-                            <option key={u.symbol} value={u.symbol}>{u.symbol}</option>
-                        ))}
-                    </select>
+                    </div>
                     <Text variant="h3" weight="semibold">Options</Text>
                     <Button
                         variant="ghost"

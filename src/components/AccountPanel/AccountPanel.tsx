@@ -524,7 +524,7 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
             Current chart: {currentSymbol || '--'}
             {currentExchange ? ` • ${currentExchange}` : ''}
           </span>
-          <span>Last refresh: {lastRefresh ? lastRefresh.toLocaleTimeString('en-IN', { hour12: false }) : '--:--:--'}</span>
+          <span>Last refresh: {lastRefresh ? lastRefresh.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) : '--:--:--'}</span>
         </div>
       </div>
 

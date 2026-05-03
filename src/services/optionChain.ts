@@ -171,7 +171,23 @@ export const UNDERLYINGS: UnderlyingConfig[] = [
   { symbol: 'MIDCPNIFTY', name: 'MIDCAP NIFTY', exchange: 'NFO', indexExchange: 'NSE_INDEX' },
   { symbol: 'SENSEX', name: 'SENSEX', exchange: 'BFO', indexExchange: 'BSE_INDEX' },
   { symbol: 'BANKEX', name: 'BANKEX', exchange: 'BFO', indexExchange: 'BSE_INDEX' },
+  { symbol: 'CRUDEOIL', name: 'CRUDEOIL', exchange: 'MCX', indexExchange: 'MCX' },
+  { symbol: 'NATURALGAS', name: 'NATURALGAS', exchange: 'MCX', indexExchange: 'MCX' },
 ];
+
+const normalizeUnderlyingSymbol = (symbol: string | null | undefined): string =>
+  String(symbol || '').trim().toUpperCase();
+
+const OPTION_CHAIN_REQUEST_SYMBOL_ALIASES: Record<string, string> = {
+  BANKNIFTY: 'NIFTY BANK',
+  FINNIFTY: 'NIFTY FIN SERVICE',
+  MIDCPNIFTY: 'NIFTY MID SELECT',
+};
+
+const getOptionChainRequestSymbol = (symbol: string | null | undefined): string => {
+  const normalized = normalizeUnderlyingSymbol(symbol);
+  return OPTION_CHAIN_REQUEST_SYMBOL_ALIASES[normalized] || normalized;
+};
 
 // Month codes for option symbols (NSE format)
 const MONTH_CODES: Record<number, string> = {
@@ -207,23 +223,73 @@ const safeParseInt = (value: unknown, fallback: number = 0): number => {
   return Number.isInteger(parsed) ? parsed : fallback;
 };
 
+const createValidatedDate = (year: number, month: number, day: number): Date | null => {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+};
+
 /**
- * Parse expiry date string in DDMMMYY format to Date object
+ * Parse expiry date strings from OpenAlgo/search into a Date object.
  */
 export const parseExpiryDate = (expiryStr: string | null | undefined): Date | null => {
-  if (!expiryStr || expiryStr.length < 7) return null;
+  if (!expiryStr) return null;
 
-  const match = expiryStr.match(/^(\d{2})([A-Z]{3})(\d{2})$/);
-  if (!match) return null;
+  const raw = String(expiryStr).trim().toUpperCase().replace(/\s+/g, '');
+  if (!raw) return null;
 
-  const [, dayStr, monthStr, yearStr] = match;
-  const day = parseInt(dayStr!, 10);
-  const month = MONTH_TO_NUM[monthStr!];
-  const year = 2000 + parseInt(yearStr!, 10);
+  const monthCodeMatch = raw.match(/^(\d{1,2})-?([A-Z]{3})-?(\d{2}|\d{4})$/);
+  if (monthCodeMatch) {
+    const [, dayStr, monthStr, yearStr] = monthCodeMatch;
+    const day = parseInt(dayStr!, 10);
+    const month = MONTH_TO_NUM[monthStr!];
+    const yearRaw = parseInt(yearStr!, 10);
+    const year = yearStr!.length === 2 ? 2000 + yearRaw : yearRaw;
 
-  if (!month || isNaN(day) || isNaN(year)) return null;
+    if (!month) return null;
+    return createValidatedDate(year, month, day);
+  }
 
-  return new Date(year, month - 1, day);
+  const isoMatch = raw.match(/^(20\d{2})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (isoMatch) {
+    const [, yearStr, monthStr, dayStr] = isoMatch;
+    return createValidatedDate(
+      parseInt(yearStr!, 10),
+      parseInt(monthStr!, 10),
+      parseInt(dayStr!, 10)
+    );
+  }
+
+  const compactIsoMatch = raw.match(/^(20\d{2})(\d{2})(\d{2})$/);
+  if (compactIsoMatch) {
+    const [, yearStr, monthStr, dayStr] = compactIsoMatch;
+    return createValidatedDate(
+      parseInt(yearStr!, 10),
+      parseInt(monthStr!, 10),
+      parseInt(dayStr!, 10)
+    );
+  }
+
+  const numericDmyMatch = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})$/);
+  if (numericDmyMatch) {
+    const [, dayStr, monthStr, yearStr] = numericDmyMatch;
+    const yearRaw = parseInt(yearStr!, 10);
+    const year = yearStr!.length === 2 ? 2000 + yearRaw : yearRaw;
+    return createValidatedDate(year, parseInt(monthStr!, 10), parseInt(dayStr!, 10));
+  }
+
+  return null;
 };
 
 /**
@@ -235,6 +301,23 @@ export const formatExpiryDate = (date: Date | null | undefined): string => {
   const month = MONTH_CODES[date.getMonth() + 1];
   const year = String(date.getFullYear()).slice(-2);
   return `${day}${month}${year}`;
+};
+
+/**
+ * Normalize expiry values from backend/search to DDMMMYY code
+ */
+export const normalizeExpiryCode = (expiry: string | null | undefined): string => {
+  if (!expiry) return '';
+
+  const raw = String(expiry).trim().toUpperCase();
+  if (!raw) return '';
+
+  const parsed = parseExpiryDate(raw);
+  if (parsed) {
+    return formatExpiryDate(parsed);
+  }
+
+  return raw.replace(/-/g, '');
 };
 
 /**
@@ -291,15 +374,18 @@ export const getOptionChain = async (
   strikeCount: number = 15,
   forceRefresh: boolean = false
 ): Promise<ProcessedOptionChain> => {
+  const normalizedUnderlying = normalizeUnderlyingSymbol(underlying);
+  const requestUnderlying = getOptionChainRequestSymbol(normalizedUnderlying);
+
   // Check if symbol is known to not support F&O
-  if (isNonFOSymbol(underlying)) {
-    logger.debug('[OptionChain] Symbol known to not support F&O:', underlying);
-    const error: ApiError = new Error(`${underlying} does not support F&O trading`);
+  if (isNonFOSymbol(normalizedUnderlying)) {
+    logger.debug('[OptionChain] Symbol known to not support F&O:', normalizedUnderlying);
+    const error: ApiError = new Error(`${normalizedUnderlying} does not support F&O trading`);
     error.code = 'NO_FO_SUPPORT';
     throw error;
   }
 
-  const cacheKey = getCacheKey(underlying, expiryDate);
+  const cacheKey = getCacheKey(normalizedUnderlying, expiryDate);
   const cached = getOptionChainFromCache(cacheKey);
 
   // Return cached data if valid and not forcing refresh
@@ -328,13 +414,17 @@ export const getOptionChain = async (
   }
 
   try {
-    const underlyingConfig = UNDERLYINGS.find((u) => u.symbol === underlying);
-    const indexExchange =
-      underlyingConfig?.indexExchange || (exchange === 'BFO' ? 'BSE' : 'NSE');
+    const underlyingConfig = UNDERLYINGS.find((u) => u.symbol === normalizedUnderlying);
+    const optionExchange = exchange || underlyingConfig?.exchange || 'NFO';
+    const requestExchange =
+      underlyingConfig?.indexExchange ||
+      (optionExchange === 'BFO' ? 'BSE_INDEX' : optionExchange === 'MCX' ? 'MCX' : 'NSE_INDEX');
 
     logger.debug('[OptionChain] Fetching fresh chain:', {
-      underlying,
-      exchange: indexExchange,
+      underlying: normalizedUnderlying,
+      requestUnderlying,
+      exchange: requestExchange,
+      optionExchange,
       expiryDate,
       strikeCount,
     });
@@ -342,8 +432,8 @@ export const getOptionChain = async (
     updateLastApiCallTime();
 
     const result = (await fetchOptionChainAPI(
-      underlying,
-      indexExchange,
+      requestUnderlying,
+      requestExchange,
       expiryDate,
       strikeCount
     )) as RawOptionChainResponse | null;
@@ -408,8 +498,9 @@ export const getOptionChain = async (
         };
       });
 
-    const expiryDateObj = parseExpiryDate(result.expiryDate);
-    const dte = getDaysToExpiry(result.expiryDate);
+    const normalizedResultExpiry = normalizeExpiryCode(result.expiryDate || expiryDate);
+    const expiryDateObj = parseExpiryDate(normalizedResultExpiry);
+    const dte = getDaysToExpiry(normalizedResultExpiry);
 
     const underlyingLTP = result.underlyingLTP || 0;
     const underlyingPrevClose =
@@ -418,19 +509,19 @@ export const getOptionChain = async (
     const changePercent = underlyingPrevClose > 0 ? (change / underlyingPrevClose) * 100 : 0;
 
     const processedData: ProcessedOptionChain = {
-      underlying: result.underlying || underlying,
-      exchange,
+      underlying: normalizedUnderlying,
+      exchange: optionExchange,
       underlyingLTP,
       underlyingPrevClose,
       change,
       changePercent,
       atmStrike: result.atmStrike || 0,
-      expiryDate: result.expiryDate || null,
+      expiryDate: normalizedResultExpiry || null,
       expiryDateObj,
       dte,
-      expiries: result.expiryDate ? [result.expiryDate] : [],
+      expiries: normalizedResultExpiry ? [normalizedResultExpiry] : [],
       chain,
-      chainByExpiry: result.expiryDate ? { [result.expiryDate]: chain } : {},
+      chainByExpiry: normalizedResultExpiry ? { [normalizedResultExpiry]: chain } : {},
     };
 
     if (chain.length > 0) {
@@ -443,7 +534,7 @@ export const getOptionChain = async (
 
     const apiError = error as ApiError;
     if (apiError.code === 'NO_FO_SUPPORT') {
-      markAsNonFOSymbol(underlying);
+      markAsNonFOSymbol(normalizedUnderlying);
       throw error;
     }
 
@@ -453,7 +544,7 @@ export const getOptionChain = async (
     }
 
     return {
-      underlying,
+      underlying: normalizedUnderlying,
       exchange,
       underlyingLTP: 0,
       underlyingPrevClose: 0,
@@ -478,10 +569,13 @@ export const getAvailableExpiries = async (
   exchange: string | null = null,
   instrumenttype: string = 'options'
 ): Promise<string[]> => {
+  const normalizedUnderlying = normalizeUnderlyingSymbol(underlying);
+  const requestUnderlying = getOptionChainRequestSymbol(normalizedUnderlying);
+
   try {
     let foExchange = exchange;
     if (!foExchange) {
-      const underlyingConfig = UNDERLYINGS.find((u) => u.symbol === underlying);
+      const underlyingConfig = UNDERLYINGS.find((u) => u.symbol === normalizedUnderlying);
       if (underlyingConfig) {
         foExchange = underlyingConfig.exchange;
       } else {
@@ -489,7 +583,7 @@ export const getAvailableExpiries = async (
       }
     }
 
-    const cacheKey = getExpiryCacheKey(underlying, foExchange, instrumenttype);
+    const cacheKey = getExpiryCacheKey(normalizedUnderlying, foExchange, instrumenttype);
     const cached = getExpiryFromCache(cacheKey);
 
     if (isCacheValid(cached, CACHE_CONFIG.EXPIRY_CACHE_TTL_MS)) {
@@ -503,24 +597,24 @@ export const getAvailableExpiries = async (
       return cached!.data as string[];
     }
 
-    logger.debug('[OptionChain] Fetching expiries for', underlying, 'on', foExchange);
+    logger.debug('[OptionChain] Fetching expiries for', normalizedUnderlying, 'as', requestUnderlying, 'on', foExchange);
 
-    let expiryDates = await fetchExpiryDates(underlying, foExchange, instrumenttype);
+    let expiryDates = await fetchExpiryDates(requestUnderlying, foExchange, instrumenttype);
 
     if (!expiryDates || expiryDates.length === 0) {
       logger.debug(
         '[OptionChain] fetchExpiryDates returned empty, trying getExpiry for',
-        underlying
+        requestUnderlying
       );
-      expiryDates = await getExpiry(underlying, foExchange, instrumenttype);
+      expiryDates = await getExpiry(requestUnderlying, foExchange, instrumenttype);
     }
 
     if (!expiryDates || expiryDates.length === 0) {
       logger.debug(
         '[OptionChain] Expiry APIs returned empty, falling back to symbol parsing for',
-        underlying
+        requestUnderlying
       );
-      return await getExpiriesFromSymbolSearch(underlying);
+      return await getExpiriesFromSymbolSearch(normalizedUnderlying);
     }
 
     const expiries = expiryDates.map((dateStr) => {
@@ -528,8 +622,8 @@ export const getAvailableExpiries = async (
         logger.warn('[OptionChain] Non-string expiry date:', dateStr);
         return String(dateStr || '');
       }
-      return dateStr.replace(/-/g, '');
-    });
+      return normalizeExpiryCode(dateStr);
+    }).filter(Boolean);
 
     setExpiryInCache(cacheKey, expiries);
 
@@ -537,7 +631,7 @@ export const getAvailableExpiries = async (
   } catch (error) {
     logger.error('[OptionChain] Error getting expiries:', error);
     try {
-      return await getExpiriesFromSymbolSearch(underlying);
+      return await getExpiriesFromSymbolSearch(normalizedUnderlying || requestUnderlying);
     } catch (fallbackError) {
       logger.error('[OptionChain] Fallback symbol search also failed:', fallbackError);
       return [];
@@ -550,7 +644,21 @@ export const getAvailableExpiries = async (
  */
 const getExpiriesFromSymbolSearch = async (underlying: string): Promise<string[]> => {
   try {
-    const symbols = (await searchSymbols(underlying)) as SymbolResult[] | null;
+    const normalizedUnderlying = normalizeUnderlyingSymbol(underlying);
+    const searchTerms = Array.from(new Set([
+      getOptionChainRequestSymbol(normalizedUnderlying),
+      normalizedUnderlying,
+    ].filter(Boolean)));
+
+    let symbols: SymbolResult[] = [];
+    for (const searchTerm of searchTerms) {
+      const result = (await searchSymbols(searchTerm)) as SymbolResult[] | null;
+      if (result?.length) {
+        symbols = result;
+        break;
+      }
+    }
+
     if (!symbols || symbols.length === 0) {
       return [];
     }

@@ -133,6 +133,57 @@ const getTimeValue = (t) => {
     return 0; // Invalid or unknown format
 };
 
+const toChartDate = (time: any): Date | null => {
+    if (typeof time === 'number') {
+        return new Date(time * 1000);
+    }
+
+    if (typeof time === 'string') {
+        const parsed = new Date(time);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    if (time && typeof time === 'object' && time.year && time.month && time.day) {
+        return new Date(Date.UTC(time.year, time.month - 1, time.day));
+    }
+
+    return null;
+};
+
+const formatISTChartTick = (time: any, tickMarkType?: number): string => {
+    const date = toChartDate(time);
+    if (!date) return '';
+
+    if (tickMarkType === 0) {
+        return new Intl.DateTimeFormat('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric'
+        }).format(date);
+    }
+
+    if (tickMarkType === 1) {
+        return new Intl.DateTimeFormat('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            month: 'short'
+        }).format(date);
+    }
+
+    if (tickMarkType === 2) {
+        return new Intl.DateTimeFormat('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit'
+        }).format(date);
+    }
+
+    return new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: tickMarkType === 4 ? '2-digit' : undefined,
+        hour12: false
+    }).format(date);
+};
+
 const ChartComponent = forwardRef<any, ChartComponentProps>(({
     data: initialData = [],
     symbol = 'RELIANCE',
@@ -1884,6 +1935,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
             timeScale: {
                 borderColor: themeColors.borderColor,
                 timeVisible: true,
+                tickMarkFormatter: formatISTChartTick,
                 rightOffset: 10, // Show ~10 candle widths of future time (TradingView style)
             },
             rightPriceScale: {
