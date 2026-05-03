@@ -1090,6 +1090,101 @@
   opacity: 0.7;
 }
 
+.tradeDeskMetaBar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 6px 12px 6px 60px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--tv-color-border, #2A2E39);
+  color: var(--tv-color-text-secondary, #787b86);
+  font-size: 11px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.tradeDeskMetaBar.noToolbar {
+  padding-left: 12px !important;
+}
+
+.tradeDeskFooterStats {
+  display: flex;
+  gap: 16px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--tv-color-text-secondary, #787b86);
+}
+
+.tradeDeskErrorBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(242, 54, 69, 0.35);
+  background: rgba(242, 54, 69, 0.08);
+  color: #f6a3ad;
+  border-radius: 6px;
+}
+
+.tradeDeskFiltersPanel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--tv-color-border, #2A2E39);
+}
+
+.tradeDeskFilterGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tradeDeskSelect {
+  min-width: 132px;
+  padding: 6px 10px;
+  background-color: var(--tv-color-pane-background, #131722);
+  border: 1px solid var(--tv-color-border, #2A2E39);
+  border-radius: 4px;
+  color: var(--tv-color-text-primary, #d1d4dc);
+  font-size: 12px;
+}
+
+.tradeDeskCheckbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tv-color-text-primary, #d1d4dc);
+  font-size: 12px;
+}
+
+.tradeDeskHighlightedRow {
+  background-color: rgba(41, 98, 255, 0.08) !important;
+}
+
+.tradeDeskMessage {
+  color: var(--tv-color-text-primary, #d1d4dc);
+  line-height: 1.35;
+}
+
+.tradeDeskCritical {
+  background-color: rgba(242, 54, 69, 0.2);
+  color: #F23645;
+}
+
+.tradeDeskWarning {
+  background-color: rgba(255, 184, 0, 0.2);
+  color: #FFB800;
+}
+
+.tradeDeskInfo {
+  background-color: rgba(41, 98, 255, 0.2);
+  color: #2962ff;
+}
+
 .closedPositionsTable .table td {
   color: var(--tv-color-text-secondary, #787b86);
 }

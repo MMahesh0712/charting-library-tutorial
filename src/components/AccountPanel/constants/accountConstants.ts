@@ -10,10 +10,10 @@ export interface Tab {
 
 // Tab definitions
 export const TABS: Tab[] = [
-    { id: 'positions', label: 'Positions' },
+    { id: 'live-positions', label: 'Live Positions' },
+    { id: 'today-trades', label: 'Today Trades' },
     { id: 'orders', label: 'Orders' },
-    { id: 'holdings', label: 'Holdings' },
-    { id: 'trades', label: 'Trades' },
+    { id: 'activity', label: 'Activity' },
 ];
 
 // Auto-refresh interval in milliseconds

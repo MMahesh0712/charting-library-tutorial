@@ -222,9 +222,9 @@ const BottomBar: React.FC<BottomBarProps> = ({
                 <div
                     className={classNames(styles.item, styles.actionItem, { [styles.active]: isAccountPanelOpen })}
                     onClick={onToggleAccountPanel}
-                    title="Toggle Account Manager Panel"
+                    title="Toggle Trade Desk Panel"
                 >
-                    Account
+                    Desk
                 </div>
                 <div className={styles.separator} />
                 <div

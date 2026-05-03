@@ -1232,6 +1232,8 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
             isOpen={isAccountPanelOpen}
             onClose={() => setIsAccountPanelOpen(false)}
             isAuthenticated={isAuthenticated}
+            currentSymbol={currentSymbol}
+            currentExchange={currentExchange}
             onSymbolSelect={(symData: any) => {
               // TSK-CS-021: route through handleSymbolChange for consistent normalization
               handleSymbolChange(symData);
