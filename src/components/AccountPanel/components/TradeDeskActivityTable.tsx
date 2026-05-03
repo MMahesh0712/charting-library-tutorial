@@ -1,6 +1,5 @@
 import React, { memo, useMemo, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { Filter, Search, X } from 'lucide-react';
 import styles from '../AccountPanel.module.css';
 import { BaseTable } from '../../shared';
 import type { ColumnDefinition } from '../../shared';
@@ -17,19 +16,19 @@ export interface TradeDeskActivityRow {
 
 export interface TradeDeskActivityTableProps {
   rows: TradeDeskActivityRow[];
+  searchTerm: string;
+  onSearchTermChange: (value: string) => void;
+  showFilters: boolean;
+  onToggleFilters: () => void;
 }
 
-const TradeDeskActivityTable: React.FC<TradeDeskActivityTableProps> = ({ rows }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+const TradeDeskActivityTable: React.FC<TradeDeskActivityTableProps> = ({ rows, searchTerm, showFilters }) => {
   const [severityFilter, setSeverityFilter] = useState('ALL');
-  const [showFilters, setShowFilters] = useState(false);
 
   const filteredRows = useMemo(() => {
     return rows
       .filter((row) => {
-        const matchesSearch =
-          !searchTerm ||
-          `${row.type} ${row.strategy} ${row.message}`.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = !searchTerm || `${row.type} ${row.strategy} ${row.message}`.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesSeverity = severityFilter === 'ALL' || row.severity.toUpperCase() === severityFilter;
         return matchesSearch && matchesSeverity;
       })
@@ -84,32 +83,8 @@ const TradeDeskActivityTable: React.FC<TradeDeskActivityTableProps> = ({ rows })
     [],
   );
 
-  const hasActiveFilters = Boolean(searchTerm) || severityFilter !== 'ALL';
-
   return (
     <div className={styles.tableContainer}>
-      <div className={styles.tableControls}>
-        <div className={styles.searchBar}>
-          <Search size={14} className={styles.searchIcon} />
-          <input
-            type="text"
-            placeholder="Search activity..."
-            value={searchTerm}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setSearchTerm(event.target.value)}
-            className={styles.searchInput}
-          />
-          {searchTerm && <X size={14} className={styles.clearIcon} onClick={() => setSearchTerm('')} />}
-        </div>
-        <button
-          className={`${styles.filterBtn} ${hasActiveFilters ? styles.filterActive : ''}`}
-          onClick={() => setShowFilters((previous) => !previous)}
-          title="Toggle filters"
-        >
-          <Filter size={14} />
-          <span>Filters</span>
-        </button>
-      </div>
-
       {showFilters && (
         <div className={styles.tradeDeskFiltersPanel}>
           <div className={styles.tradeDeskFilterGroup}>

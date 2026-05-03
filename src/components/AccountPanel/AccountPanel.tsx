@@ -1,6 +1,17 @@
 import React, { memo, useCallback, useMemo, useState } from 'react';
-import type { MouseEvent } from 'react';
-import { Activity, BriefcaseBusiness, ClipboardList, Maximize2, Minimize2, RefreshCw, ShieldAlert, X } from 'lucide-react';
+import type { ChangeEvent, MouseEvent } from 'react';
+import {
+  Activity,
+  BriefcaseBusiness,
+  ClipboardList,
+  Filter,
+  Maximize2,
+  Minimize2,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  X,
+} from 'lucide-react';
 import styles from './AccountPanel.module.css';
 import { cancelOrder, modifyOrder } from '../../services/openalgo';
 import { useOrders } from '../../context/OrderContext';
@@ -176,6 +187,13 @@ function buildActivityRows(
   return rows.sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 80);
 }
 
+const SEARCH_PLACEHOLDERS: Record<string, string> = {
+  'live-positions': 'Search symbol or index...',
+  'today-trades': "Search today's trades...",
+  orders: 'Search symbol...',
+  activity: 'Search activity...',
+};
+
 const AccountPanel: React.FC<AccountPanelProps> = ({
   isOpen,
   onClose,
@@ -198,6 +216,18 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
   const [selectedOrderForCancel, setSelectedOrderForCancel] = useState<Order | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [tradeDeskSearchByTab, setTradeDeskSearchByTab] = useState<Record<string, string>>({
+    'live-positions': '',
+    'today-trades': '',
+    orders: '',
+    activity: '',
+  });
+  const [tradeDeskFiltersByTab, setTradeDeskFiltersByTab] = useState<Record<string, boolean>>({
+    'live-positions': false,
+    'today-trades': false,
+    orders: false,
+    activity: false,
+  });
 
   const { cockpit, positions, trades, events, isLoading, error, lastRefresh, refresh } = useTradeDeskData(
     isOpen,
@@ -206,6 +236,8 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
   );
 
   const currentSymbolKey = useMemo(() => normalizeKey(currentSymbol), [currentSymbol]);
+  const activeSearchTerm = tradeDeskSearchByTab[activeTab] || '';
+  const activeFiltersOpen = tradeDeskFiltersByTab[activeTab] || false;
 
   const handleRefresh = useCallback(async () => {
     await refreshTradingData();
@@ -223,6 +255,34 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
     },
     [onSymbolSelect, currentExchange],
   );
+
+  const handleTradeDeskSearchChange = useCallback(
+    (value: string) => {
+      setTradeDeskSearchByTab((previous) => ({
+        ...previous,
+        [activeTab]: value,
+      }));
+    },
+    [activeTab],
+  );
+
+  const handleTradeDeskSearchInput = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      handleTradeDeskSearchChange(event.target.value);
+    },
+    [handleTradeDeskSearchChange],
+  );
+
+  const clearTradeDeskSearch = useCallback(() => {
+    handleTradeDeskSearchChange('');
+  }, [handleTradeDeskSearchChange]);
+
+  const handleTradeDeskFilterToggle = useCallback(() => {
+    setTradeDeskFiltersByTab((previous) => ({
+      ...previous,
+      [activeTab]: !previous[activeTab],
+    }));
+  }, [activeTab]);
 
   const handleModifyOrder = useCallback((order: Order): void => {
     setSelectedOrderForModify(order);
@@ -260,8 +320,8 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
       setIsCancelModalOpen(false);
       setSelectedOrderForCancel(null);
       await handleRefresh();
-    } catch (error) {
-      showToast?.(error instanceof Error ? error.message : 'Failed to cancel order', 'error');
+    } catch (caughtError) {
+      showToast?.(caughtError instanceof Error ? caughtError.message : 'Failed to cancel order', 'error');
     } finally {
       setIsCancelling(false);
     }
@@ -271,10 +331,7 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
     const strategyCounts = cockpit?.algoMonitor?.strategyAttribution?.counts || {};
     const livePnl = cockpit?.money?.unrealizedPnL ?? cockpit?.positions?.totalM2M ?? 0;
     const bookedPnl = cockpit?.money?.realizedPnL ?? 0;
-    const totalTrades =
-      cockpit?.stats?.totalTradesToday ??
-      cockpit?.tradesToday ??
-      trades.length;
+    const totalTrades = cockpit?.stats?.totalTradesToday ?? cockpit?.tradesToday ?? trades.length;
     return {
       openTrades: cockpit?.positions?.openCount ?? positions.length,
       livePnl: toNumber(livePnl),
@@ -298,6 +355,10 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
             positions={positions}
             currentSymbolKey={currentSymbolKey}
             onRowClick={handleRowClick}
+            searchTerm={activeSearchTerm}
+            onSearchTermChange={handleTradeDeskSearchChange}
+            showFilters={activeFiltersOpen}
+            onToggleFilters={handleTradeDeskFilterToggle}
           />
         );
       case 'today-trades':
@@ -306,6 +367,10 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
             trades={trades}
             currentSymbolKey={currentSymbolKey}
             onRowClick={handleRowClick}
+            searchTerm={activeSearchTerm}
+            onSearchTermChange={handleTradeDeskSearchChange}
+            showFilters={activeFiltersOpen}
+            onToggleFilters={handleTradeDeskFilterToggle}
           />
         );
       case 'orders':
@@ -315,10 +380,22 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
             onRowClick={(symbol, exchange) => handleRowClick(symbol, exchange)}
             onCancelOrder={(order: any, _event: MouseEvent<HTMLButtonElement>) => handleCancelOrder(order as Order)}
             onModifyOrder={(order: any, _event: MouseEvent<HTMLButtonElement>) => handleModifyOrder(order as Order)}
+            searchTerm={activeSearchTerm}
+            onSearchTermChange={handleTradeDeskSearchChange}
+            showFilters={activeFiltersOpen}
+            onToggleFilters={handleTradeDeskFilterToggle}
           />
         );
       case 'activity':
-        return <TradeDeskActivityTable rows={activityRows} />;
+        return (
+          <TradeDeskActivityTable
+            rows={activityRows}
+            searchTerm={activeSearchTerm}
+            onSearchTermChange={handleTradeDeskSearchChange}
+            showFilters={activeFiltersOpen}
+            onToggleFilters={handleTradeDeskFilterToggle}
+          />
+        );
       default:
         return null;
     }
@@ -396,31 +473,59 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
         </div>
       </div>
 
-      <div className={`${styles.tabs} ${!isToolbarVisible ? styles.noToolbar : ''}`}>
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            className={`${styles.tab} ${activeTab === tab.id ? styles.tabActive : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            <span>{tab.label}</span>
-            {tab.id === 'live-positions' && summary.openTrades > 0 && <span className={styles.tabBadge}>{summary.openTrades}</span>}
-            {tab.id === 'orders' && Number(cockpit?.orders?.pending || 0) > 0 && (
-              <span className={styles.tabBadge}>{cockpit?.orders?.pending}</span>
-            )}
-            {tab.id === 'activity' && (cockpit?.redFlags?.length || 0) > 0 && (
-              <span className={styles.tabBadge}>{cockpit?.redFlags?.length}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      <div className={`${styles.tradeDeskTopRow} ${!isToolbarVisible ? styles.noToolbar : ''}`}>
+        <div className={styles.tradeDeskTabsInline}>
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              className={`${styles.tab} ${activeTab === tab.id ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <span>{tab.label}</span>
+              {tab.id === 'live-positions' && summary.openTrades > 0 && <span className={styles.tabBadge}>{summary.openTrades}</span>}
+              {tab.id === 'orders' && Number(cockpit?.orders?.pending || 0) > 0 && (
+                <span className={styles.tabBadge}>{cockpit?.orders?.pending}</span>
+              )}
+              {tab.id === 'activity' && (cockpit?.redFlags?.length || 0) > 0 && (
+                <span className={styles.tabBadge}>{cockpit?.redFlags?.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
 
-      <div className={`${styles.tradeDeskMetaBar} ${!isToolbarVisible ? styles.noToolbar : ''}`}>
-        <span>
-          {cockpit?.connection?.accountName || 'Trading system'} {cockpit?.connection?.clientId ? `• ${cockpit.connection.clientId}` : ''}
-        </span>
-        <span>Current chart: {currentSymbol || '--'}{currentExchange ? ` • ${currentExchange}` : ''}</span>
-        <span>Last refresh: {lastRefresh ? lastRefresh.toLocaleTimeString('en-IN', { hour12: false }) : '--:--:--'}</span>
+        <div className={styles.tradeDeskInlineControls}>
+          <div className={styles.searchBar}>
+            <Search size={14} className={styles.searchIcon} />
+            <input
+              type="text"
+              placeholder={SEARCH_PLACEHOLDERS[activeTab] || 'Search...'}
+              value={activeSearchTerm}
+              onChange={handleTradeDeskSearchInput}
+              className={styles.searchInput}
+            />
+            {activeSearchTerm && <X size={14} className={styles.clearIcon} onClick={clearTradeDeskSearch} />}
+          </div>
+          <button
+            className={`${styles.filterBtn} ${(activeFiltersOpen || activeSearchTerm) ? styles.filterActive : ''}`}
+            onClick={handleTradeDeskFilterToggle}
+            title="Toggle filters"
+          >
+            <Filter size={14} />
+            <span>Filters</span>
+          </button>
+        </div>
+
+        <div className={styles.tradeDeskMetaInline}>
+          <span>
+            {cockpit?.connection?.accountName || 'Trading system'}
+            {cockpit?.connection?.clientId ? ` • ${cockpit.connection.clientId}` : ''}
+          </span>
+          <span>
+            Current chart: {currentSymbol || '--'}
+            {currentExchange ? ` • ${currentExchange}` : ''}
+          </span>
+          <span>Last refresh: {lastRefresh ? lastRefresh.toLocaleTimeString('en-IN', { hour12: false }) : '--:--:--'}</span>
+        </div>
       </div>
 
       {!isMinimized && (

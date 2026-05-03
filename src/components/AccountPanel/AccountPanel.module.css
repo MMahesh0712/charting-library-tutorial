@@ -159,6 +159,78 @@
   display: none;
 }
 
+.tradeDeskTopRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.95fr) minmax(260px, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px 8px 60px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--tv-color-border, #2A2E39);
+  min-width: 0;
+  transition: padding-left 0.15s ease;
+}
+
+.tradeDeskTabsInline {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tradeDeskTabsInline::-webkit-scrollbar {
+  display: none;
+}
+
+.tradeDeskTabsInline .tab {
+  padding: 6px 14px;
+}
+
+.tradeDeskInlineControls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tradeDeskInlineControls .searchBar {
+  flex: 1;
+  max-width: none;
+  min-width: 180px;
+}
+
+.tradeDeskMetaInline {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--tv-color-text-secondary, #787b86);
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tradeDeskMetaInline::-webkit-scrollbar {
+  display: none;
+}
+
+.tradeDeskMetaInline span {
+  flex-shrink: 0;
+}
+
+.tradeDeskTopRow.noToolbar {
+  padding-left: 12px !important;
+}
+
 /* When left toolbar is hidden, reduce left padding */
 .noToolbar {
   padding-left: 12px !important;
@@ -629,6 +701,20 @@
   .tab {
     padding: 8px 12px;
     font-size: 11px;
+  }
+
+  .tradeDeskTopRow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 8px 8px 8px 60px;
+  }
+
+  .tradeDeskInlineControls {
+    justify-content: flex-start;
+  }
+
+  .tradeDeskMetaInline {
+    justify-content: flex-start;
   }
 
   .exitBtn span,

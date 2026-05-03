@@ -3,8 +3,8 @@
  * Renders the orders table for AccountPanel with search and filter
  */
 import React, { useState, useMemo, useCallback, memo } from 'react';
-import type { MouseEvent, ChangeEvent, ReactNode } from 'react';
-import { XCircle, Search, X, Filter, Edit } from 'lucide-react';
+import type { MouseEvent, ReactNode } from 'react';
+import { XCircle, Edit } from 'lucide-react';
 import styles from '../AccountPanel.module.css';
 import { formatCurrency, isOpenOrderStatus, sortData } from '../utils/accountFormatters';
 import { BaseTable } from '../../shared';
@@ -51,22 +51,28 @@ export interface OrdersTableProps {
     onRowClick?: (symbol: string, exchange: string) => void;
     onCancelOrder: (order: Order, e: MouseEvent<HTMLButtonElement>) => void;
     onModifyOrder: (order: Order, e: MouseEvent<HTMLButtonElement>) => void;
+    searchTerm: string;
+    onSearchTermChange: (value: string) => void;
+    showFilters: boolean;
+    onToggleFilters: () => void;
 }
 
 const OrdersTable: React.FC<OrdersTableProps> = ({
     orders,
     onRowClick,
     onCancelOrder,
-    onModifyOrder
+    onModifyOrder,
+    searchTerm,
+    onSearchTermChange,
+    showFilters,
+    onToggleFilters
 }) => {
-    const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState<Filters>({
         action: [],
         status: [],
         exchange: [],
         product: []
     });
-    const [showFilters, setShowFilters] = useState(false);
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: 'asc' });
 
     // Get unique values for filters
@@ -148,9 +154,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
 
     // Clear all filters
     const handleClearFilters = useCallback((): void => {
-        setSearchTerm('');
+        onSearchTermChange('');
         setFilters({ action: [], status: [], exchange: [], product: [] });
-    }, []);
+    }, [onSearchTermChange]);
 
     // Handle column sorting
     const handleSort = useCallback((key: string): void => {
@@ -160,7 +166,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
         }));
     }, []);
 
-    const hasActiveFilters = searchTerm || filters.action.length > 0 ||
+    const hasActiveFilters = !!searchTerm || filters.action.length > 0 ||
         filters.status.length > 0 || filters.exchange.length > 0 || filters.product.length > 0;
 
     // Define columns for BaseTable
@@ -303,50 +309,6 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
 
     return (
         <div className={styles.tableContainer}>
-            {/* Search and Filter Bar */}
-            <div className={styles.tableControls}>
-                <div className={styles.searchBar}>
-                    <Search size={14} className={styles.searchIcon} />
-                    <input
-                        type="text"
-                        placeholder="Search symbol..."
-                        value={searchTerm}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-                        className={styles.searchInput}
-                    />
-                    {searchTerm && (
-                        <X
-                            size={14}
-                            className={styles.clearIcon}
-                            onClick={() => setSearchTerm('')}
-                        />
-                    )}
-                </div>
-
-                <button
-                    className={`${styles.filterBtn} ${hasActiveFilters ? styles.filterActive : ''}`}
-                    onClick={() => setShowFilters(!showFilters)}
-                    title="Toggle filters"
-                >
-                    <Filter size={14} />
-                    <span>Filters</span>
-                    {hasActiveFilters && <span className={styles.filterCount}>
-                        {filters.action.length + filters.status.length + filters.exchange.length + filters.product.length}
-                    </span>}
-                </button>
-
-                {hasActiveFilters && (
-                    <button
-                        className={styles.clearFiltersBtn}
-                        onClick={handleClearFilters}
-                        title="Clear all filters"
-                    >
-                        <X size={12} />
-                        <span>Clear</span>
-                    </button>
-                )}
-            </div>
-
             {/* Filter Dropdowns */}
             {showFilters && (
                 <div className={styles.filterPanel}>

@@ -1,6 +1,5 @@
 import React, { memo, useCallback, useMemo, useState } from 'react';
 import type { ChangeEvent, MouseEvent } from 'react';
-import { Filter, Search, X } from 'lucide-react';
 import styles from '../AccountPanel.module.css';
 import { BaseTable } from '../../shared';
 import type { ColumnDefinition } from '../../shared';
@@ -14,6 +13,10 @@ export interface TradeDeskTradesTableProps {
   trades: TradeDeskTrade[];
   currentSymbolKey?: string;
   onRowClick?: (symbol: string, exchange?: string) => void;
+  searchTerm: string;
+  onSearchTermChange: (value: string) => void;
+  showFilters: boolean;
+  onToggleFilters: () => void;
 }
 
 function normalizeKey(value: string | undefined | null): string {
@@ -49,12 +52,12 @@ const TradeDeskTradesTable: React.FC<TradeDeskTradesTableProps> = ({
   trades,
   currentSymbolKey = '',
   onRowClick,
+  searchTerm,
+  showFilters,
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
   const [strategyFilter, setStrategyFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [showCurrentSymbolOnly, setShowCurrentSymbolOnly] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
 
   const strategyOptions = useMemo(
     () => ['ALL', ...new Set(trades.map((trade) => String(trade.strategy || 'MANUAL')).filter(Boolean))],
@@ -67,8 +70,7 @@ const TradeDeskTradesTable: React.FC<TradeDeskTradesTableProps> = ({
       .filter((trade) => {
         const haystack = `${trade.index || ''} ${trade.symbol || ''}`.toLowerCase();
         const matchesSearch = !searchTerm || haystack.includes(searchTerm.toLowerCase());
-        const matchesStrategy =
-          strategyFilter === 'ALL' || String(trade.strategy || 'MANUAL') === strategyFilter;
+        const matchesStrategy = strategyFilter === 'ALL' || String(trade.strategy || 'MANUAL') === strategyFilter;
         const tradeStatus = String(trade.status || (trade.closeTime ? 'CLOSED' : 'OPEN')).toUpperCase();
         const matchesStatus = statusFilter === 'ALL' || tradeStatus === statusFilter;
         const rowKey = normalizeKey(String(trade.index || trade.symbol || ''));
@@ -159,9 +161,6 @@ const TradeDeskTradesTable: React.FC<TradeDeskTradesTableProps> = ({
     [],
   );
 
-  const hasActiveFilters =
-    Boolean(searchTerm) || strategyFilter !== 'ALL' || statusFilter !== 'ALL' || showCurrentSymbolOnly;
-
   const handleRowClick = useCallback(
     (row: TradeRow, _event: MouseEvent<HTMLTableRowElement>) => {
       if (onRowClick && row.symbol) {
@@ -181,28 +180,6 @@ const TradeDeskTradesTable: React.FC<TradeDeskTradesTableProps> = ({
 
   return (
     <div className={styles.tableContainer}>
-      <div className={styles.tableControls}>
-        <div className={styles.searchBar}>
-          <Search size={14} className={styles.searchIcon} />
-          <input
-            type="text"
-            placeholder="Search today's trades..."
-            value={searchTerm}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setSearchTerm(event.target.value)}
-            className={styles.searchInput}
-          />
-          {searchTerm && <X size={14} className={styles.clearIcon} onClick={() => setSearchTerm('')} />}
-        </div>
-        <button
-          className={`${styles.filterBtn} ${hasActiveFilters ? styles.filterActive : ''}`}
-          onClick={() => setShowFilters((previous) => !previous)}
-          title="Toggle filters"
-        >
-          <Filter size={14} />
-          <span>Filters</span>
-        </button>
-      </div>
-
       {showFilters && (
         <div className={styles.tradeDeskFiltersPanel}>
           <div className={styles.tradeDeskFilterGroup}>
