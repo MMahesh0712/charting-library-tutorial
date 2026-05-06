@@ -1,11 +1,10 @@
 import { getHistoricalKlines, getKlines, subscribeToTicker } from './openalgo';
 import { getInstrumentInfo, searchSymbols, type Instrument, type SearchResult } from './instrumentService';
 import logger from '../utils/logger';
-import { getCanonicalExchange, normalizeSymbol } from '../utils/symbolNormalization';
+import { getCanonicalExchange, getUnderlyingAlias, normalizeSymbol } from '../utils/symbolNormalization';
 
 type DatafeedCallback<T> = (value: T) => void;
 type DatafeedErrorCallback = (error: string) => void;
-type HistoryCallback = (bars: TvBar[], meta?: { noData?: boolean }) => void;
 
 export interface TvBar {
   time: number;
@@ -281,7 +280,7 @@ export function createTradingViewDatafeed() {
       symbolInfo: TvSymbolInfo,
       resolution: string,
       periodParams: TvPeriodParams,
-      onHistoryCallback: HistoryCallback,
+      onHistoryCallback: DatafeedCallback<TvBar[]>,
       onErrorCallback: DatafeedErrorCallback
     ) {
       try {
@@ -296,18 +295,16 @@ export function createTradingViewDatafeed() {
           ? await getKlines(symbol, exchange, interval)
           : await getHistoricalKlines(symbol, exchange, interval, fromDate, toDate);
 
-        const bars: TvBar[] = candles
-          .map((bar) => ({
-            time: toBarTimeMs(bar.time),
-            open: bar.open,
-            high: bar.high,
-            low: bar.low,
-            close: bar.close,
-            volume: bar.volume,
-          }))
-          .sort((a, b) => a.time - b.time);
+        const bars: TvBar[] = candles.map((bar) => ({
+          time: toBarTimeMs(bar.time),
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
+          volume: bar.volume,
+        }));
 
-        onHistoryCallback(bars, { noData: bars.length === 0 });
+        onHistoryCallback(bars);
       } catch (error) {
         logger.error('[TradingViewDatafeed] getBars failed:', error);
         onErrorCallback((error as Error).message || 'Failed to load historical data');

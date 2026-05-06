@@ -2,7 +2,7 @@ import { getString, STORAGE_KEYS } from './storageService';
 
 export type ChartEngine = 'legacy' | 'tradingview';
 
-const DEFAULT_ENGINE: ChartEngine = 'tradingview';
+const DEFAULT_ENGINE: ChartEngine = 'legacy';
 const APP_BASE_PATH = normalizeBasePath(import.meta.env.BASE_URL || '/');
 const DEFAULT_LIBRARY_PATH = `${APP_BASE_PATH}charting_library/`;
 
@@ -48,8 +48,9 @@ export function getTradingViewExpectedAssets(libraryPath = getTradingViewLibrary
   const normalized = normalizeTradingViewLibraryPath(libraryPath);
   return [
     `${normalized}charting_library.standalone.js`,
+    `${normalized}charting_library/`,
     `${normalized}bundles/`,
-    `${normalized}sameorigin.html`,
+    `${normalized}static/`,
   ];
 }
 

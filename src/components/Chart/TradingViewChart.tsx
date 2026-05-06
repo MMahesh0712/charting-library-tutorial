@@ -13,7 +13,6 @@ import {
   normalizeTradingViewLibraryPath,
 } from '../../services/tradingViewConfig';
 import { createTradingViewDatafeed } from '../../services/tradingViewDatafeed';
-import { normalizeSymbolExchange } from '../../utils/symbolNormalization';
 
 interface TradingViewChartProps {
   symbol?: string;
@@ -38,11 +37,6 @@ interface TradingViewWidgetInstance {
 const DEFAULT_STATUS =
   'TradingView integration foundation is ready. Library files and datafeed will be connected in the next phase.';
 const TV_LOCALE = 'en';
-
-function getTradingViewWidgetSymbol(symbol: string, exchange: string): string {
-  const normalized = normalizeSymbolExchange(symbol, exchange);
-  return `${normalized.exchange}:${normalized.symbol}`;
-}
 
 function normalizeInterval(interval?: string): string {
   if (!interval) return '5';
@@ -119,7 +113,6 @@ const TradingViewChart = forwardRef<any, TradingViewChartProps>(function Trading
   const libraryPath = normalizeTradingViewLibraryPath(configuredLibraryPath || getTradingViewLibraryPath());
   const scriptUrl = getTradingViewScriptUrl(libraryPath);
   const tvInterval = normalizeInterval(interval);
-  const tvSymbol = getTradingViewWidgetSymbol(symbol, exchange);
   const expectedAssets = getTradingViewExpectedAssets(libraryPath);
   const buildNotes = getTradingViewBuildNotes();
 
@@ -156,7 +149,7 @@ const TradingViewChart = forwardRef<any, TradingViewChartProps>(function Trading
           container: widgetContainerId,
           library_path: libraryPath,
           datafeed: createTradingViewDatafeed(),
-          symbol: tvSymbol,
+          symbol,
           interval: tvInterval,
           locale: TV_LOCALE,
           timezone: 'Asia/Kolkata',
@@ -187,7 +180,7 @@ const TradingViewChart = forwardRef<any, TradingViewChartProps>(function Trading
       widgetRef.current = null;
       setIsReady(false);
     };
-  }, [libraryPath, scriptUrl, tvSymbol, exchange, tvInterval, theme, chartId, widgetContainerId]);
+  }, [libraryPath, scriptUrl, symbol, exchange, tvInterval, theme, chartId, widgetContainerId]);
 
   return (
     <div
@@ -236,7 +229,7 @@ const TradingViewChart = forwardRef<any, TradingViewChartProps>(function Trading
               {status}
             </div>
             <div style={{ fontSize: '12px', lineHeight: 1.7, opacity: 0.8 }}>
-              <div><strong>Symbol:</strong> {tvSymbol}</div>
+              <div><strong>Symbol:</strong> {symbol}</div>
               <div><strong>Exchange:</strong> {exchange}</div>
               <div><strong>Interval:</strong> {tvInterval}</div>
               <div><strong>Library path:</strong> {libraryPath}</div>
