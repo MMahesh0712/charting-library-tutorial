@@ -1,11 +1,17 @@
-Place the official TradingView Advanced Charts distribution files in this folder.
+TradingView Advanced Charts runtime files are vendored here for private
+OpenDhan deployment.
 
-Expected example files:
+Current package:
+- MMahesh0712/charting_library
+- master, v31.1.0 package
+
+Required runtime files:
 - charting_library.standalone.js
-- any bundled library assets shipped by TradingView
+- bundles/
+- sameorigin.html
 
 Default integration path:
 - /charting_library/
 
-For VPS deployment, same-origin hosting is recommended so the chart page and
-the library assets are served from the same domain and port.
+Keep this package private. Do not publish TradingView library assets in a
+public repository or public package registry.

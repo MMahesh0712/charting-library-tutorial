@@ -114,7 +114,7 @@ const OpenAlgoSection: React.FC<OpenAlgoSectionProps> = ({
                     <option value="tradingview">TradingView Advanced Chart</option>
                 </select>
                 <p className={styles.inputHint}>
-                    Use Legacy while migrating. Switch to TradingView after library files are available on the same app host.
+                    TradingView is the default chart engine. Legacy remains available only as a fallback during migration.
                 </p>
             </div>
 
