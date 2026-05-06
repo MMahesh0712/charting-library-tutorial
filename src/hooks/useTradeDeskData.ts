@@ -156,6 +156,53 @@ async function fetchJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function unwrapPayload(value: unknown): unknown {
+  let current = value;
+
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!isRecord(current)) return current;
+
+    const next = current.data ?? current.payload ?? current.result;
+    if (!isRecord(next) && !Array.isArray(next)) return current;
+
+    current = next;
+  }
+
+  return current;
+}
+
+function extractObject<T>(value: unknown, nestedKeys: string[] = []): T | null {
+  const payload = unwrapPayload(value);
+  if (!isRecord(payload)) return null;
+
+  for (const key of nestedKeys) {
+    const nested = unwrapPayload(payload[key]);
+    if (isRecord(nested)) return nested as T;
+  }
+
+  return payload as T;
+}
+
+function extractArray<T>(value: unknown, keys: string[]): T[] {
+  const candidates = [value, unwrapPayload(value)];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate as T[];
+    if (!isRecord(candidate)) continue;
+
+    for (const key of keys) {
+      const direct = unwrapPayload(candidate[key]);
+      if (Array.isArray(direct)) return direct as T[];
+    }
+  }
+
+  return [];
+}
+
 export function useTradeDeskData(
   isOpen: boolean,
   isAuthenticated: boolean,
@@ -185,25 +232,25 @@ export function useTradeDeskData(
     const [cockpitResult, positionsResult, tradesResult, eventsResult] = results;
 
     if (cockpitResult.status === 'fulfilled') {
-      setCockpit(cockpitResult.value as unknown as TradeDeskCockpit);
+      setCockpit(extractObject<TradeDeskCockpit>(cockpitResult.value, ['cockpit', 'accountCockpit', 'summary']));
     } else {
       setCockpit(null);
     }
 
     if (positionsResult.status === 'fulfilled') {
-      setPositions(Array.isArray(positionsResult.value.positions) ? positionsResult.value.positions : []);
+      setPositions(extractArray<TradeDeskPosition>(positionsResult.value, ['positions', 'openPositions', 'rows', 'items']));
     } else {
       setPositions([]);
     }
 
     if (tradesResult.status === 'fulfilled') {
-      setTrades(Array.isArray(tradesResult.value.trades) ? tradesResult.value.trades : []);
+      setTrades(extractArray<TradeDeskTrade>(tradesResult.value, ['trades', 'todayTrades', 'rows', 'items']));
     } else {
       setTrades([]);
     }
 
     if (eventsResult.status === 'fulfilled') {
-      setEvents(Array.isArray(eventsResult.value.events) ? eventsResult.value.events : []);
+      setEvents(extractArray<TradeDeskSystemEvent>(eventsResult.value, ['events', 'systemEvents', 'rows', 'items']));
     } else {
       setEvents([]);
     }

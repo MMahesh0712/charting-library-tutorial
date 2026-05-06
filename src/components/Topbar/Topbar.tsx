@@ -46,6 +46,17 @@ interface ExpandedSections {
     [key: string]: boolean;
 }
 
+export type SignalStrategyFilter = 'ALL' | 'BET' | 'GAP_PULSE' | 'STRUCTURE_PULSE' | 'DNX_SEZ' | 'GTL';
+
+const SIGNAL_STRATEGY_OPTIONS: Array<{ value: SignalStrategyFilter; label: string; title: string }> = [
+    { value: 'ALL', label: 'ALL', title: 'Show all strategy markers' },
+    { value: 'BET', label: 'BET', title: 'Show BET markers only' },
+    { value: 'GAP_PULSE', label: 'GAP', title: 'Show Gap Pulse markers only' },
+    { value: 'STRUCTURE_PULSE', label: 'SP', title: 'Show Structure Pulse markers only' },
+    { value: 'DNX_SEZ', label: 'DNX', title: 'Show DNX SEZ markers only' },
+    { value: 'GTL', label: 'GTL', title: 'Show GTL markers only' },
+];
+
 export interface TopbarProps {
     symbol: string;
     exchange?: string;
@@ -88,6 +99,8 @@ export interface TopbarProps {
     onAddIndicator?: (indicator: string) => void;
     onPineEditorClick?: () => void;
     isPineEditorOpen?: boolean;
+    signalStrategyFilter?: SignalStrategyFilter;
+    onSignalStrategyFilterChange?: (filter: SignalStrategyFilter) => void;
 }
 
 const Topbar: React.FC<TopbarProps> = ({
@@ -101,7 +114,9 @@ const Topbar: React.FC<TopbarProps> = ({
     isReplayMode = false, onSettingsClick, onTemplatesClick, onChartTemplatesClick,
     onStraddleClick, strategyConfig = null,
     onOptionsClick, onHeatmapClick, onAddIndicator,
-    onPineEditorClick, isPineEditorOpen = false
+    onPineEditorClick, isPineEditorOpen = false,
+    signalStrategyFilter = 'ALL',
+    onSignalStrategyFilterChange
 }) => {
 
     const [showIndicators, setShowIndicators] = useState(false);
@@ -815,6 +830,23 @@ const Topbar: React.FC<TopbarProps> = ({
                                                         </div>
                                                     </button>
                                                 </Tooltip>
+                                            </div>
+
+                                            <div className={styles.separatorWrap}><div className={styles.separator}></div></div>
+                                            <div className={styles.signalFilterGroup} aria-label="Strategy marker filter">
+                                                {SIGNAL_STRATEGY_OPTIONS.map((option) => (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        className={classNames(styles.signalFilterButton, {
+                                                            [styles.signalFilterButtonActive]: signalStrategyFilter === option.value,
+                                                        })}
+                                                        onClick={() => onSignalStrategyFilterChange?.(option.value)}
+                                                        title={option.title}
+                                                    >
+                                                        {option.label}
+                                                    </button>
+                                                ))}
                                             </div>
 
                                             <div className={styles.fill}></div>

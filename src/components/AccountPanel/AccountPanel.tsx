@@ -15,7 +15,7 @@ import {
 import styles from './AccountPanel.module.css';
 import { cancelOrder, modifyOrder } from '../../services/openalgo';
 import { useOrders } from '../../context/OrderContext';
-import useTradeDeskData, { type TradeDeskSystemEvent, type TradeDeskTrade } from '../../hooks/useTradeDeskData';
+import useTradeDeskData, { type TradeDeskPosition, type TradeDeskSystemEvent, type TradeDeskTrade } from '../../hooks/useTradeDeskData';
 import ModifyOrderModal from './components/ModifyOrderModal';
 import CancelOrderModal from './components/CancelOrderModal';
 import { OrdersTable, TradeDeskActivityTable, TradeDeskPositionsTable, TradeDeskTradesTable } from './components';
@@ -84,6 +84,50 @@ function normalizeKey(value: string | undefined | null): string {
 function toNumber(value: unknown): number {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function readNumericValue(value: unknown): number | null {
+  if (typeof value === 'number' || typeof value === 'string') {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    for (const key of ['total', 'value', 'amount', 'pnl']) {
+      const nested = readNumericValue(record[key]);
+      if (nested !== null) return nested;
+    }
+  }
+
+  return null;
+}
+
+function firstNumber(record: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const numeric = readNumericValue(record[key]);
+    if (numeric !== null) return numeric;
+  }
+  return null;
+}
+
+function sumNumbers<T extends Record<string, unknown>>(rows: T[], keys: string[]): number {
+  return rows.reduce((total, row) => total + (firstNumber(row, keys) ?? 0), 0);
+}
+
+function isClosedTrade(trade: TradeDeskTrade): boolean {
+  const status = String(trade.status || '').toUpperCase();
+  return Boolean(trade.closeTime) || ['CLOSED', 'EXITED', 'COMPLETE', 'COMPLETED'].includes(status);
+}
+
+function isOpenPosition(position: TradeDeskPosition): boolean {
+  const status = String(position.status || position.state || '').toUpperCase();
+  if (['CLOSED', 'EXITED', 'COMPLETE', 'COMPLETED'].includes(status)) return false;
+
+  const quantity = firstNumber(position, ['quantity', 'qty', 'netQty', 'net_qty', 'lots', 'openQuantity']);
+  if (quantity !== null) return quantity !== 0;
+
+  return !position.closed_at && !position.closeTime && !position.exit_time && !position.exitTime;
 }
 
 function formatMetric(value: number): string {
@@ -329,18 +373,36 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
 
   const summary = useMemo(() => {
     const strategyCounts = cockpit?.algoMonitor?.strategyAttribution?.counts || {};
-    const livePnl = cockpit?.money?.unrealizedPnL ?? cockpit?.positions?.totalM2M ?? 0;
-    const bookedPnl = cockpit?.money?.realizedPnL ?? 0;
-    const totalTrades = cockpit?.stats?.totalTradesToday ?? cockpit?.tradesToday ?? trades.length;
+    const openPositions = positions.filter(isOpenPosition);
+    const openTrades = trades.filter((trade) => !isClosedTrade(trade));
+    const closedTrades = trades.filter(isClosedTrade);
+    const livePnlFallback =
+      sumNumbers(openPositions, ['unrealizedPnL', 'unrealized_pnl', 'm2m', 'mtm', 'pnl', 'totalM2M']) ||
+      sumNumbers(openTrades, ['unrealizedPnL', 'unrealized_pnl', 'pnl', 'netPnL', 'totalPnL']);
+    const bookedPnlFallback = sumNumbers(closedTrades, ['realizedPnL', 'realized_pnl', 'bookedPnL', 'booked_pnl', 'pnl', 'netPnL']);
+    const cockpitLivePnl = toNumber(cockpit?.money?.unrealizedPnL ?? cockpit?.positions?.totalM2M ?? cockpit?.positions?.totalPnL ?? 0);
+    const cockpitBookedPnl = toNumber(cockpit?.money?.realizedPnL ?? 0);
+    const totalTrades = Math.max(
+      toNumber(cockpit?.stats?.totalTradesToday),
+      toNumber(cockpit?.tradesToday),
+      trades.length,
+    );
+    const activeStrategiesFromRows = new Set(
+      openTrades.map((trade) => String(trade.strategy || '').trim()).filter(Boolean),
+    ).size;
+
     return {
-      openTrades: cockpit?.positions?.openCount ?? positions.length,
-      livePnl: toNumber(livePnl),
-      bookedPnl: toNumber(bookedPnl),
-      todayTrades: toNumber(totalTrades),
-      strategiesActive: Object.values(strategyCounts).filter((count) => Number(count) > 0).length,
+      openTrades: Math.max(toNumber(cockpit?.positions?.openCount), openPositions.length, openTrades.length),
+      livePnl: cockpitLivePnl !== 0 ? cockpitLivePnl : livePnlFallback,
+      bookedPnl: cockpitBookedPnl !== 0 ? cockpitBookedPnl : bookedPnlFallback,
+      todayTrades: totalTrades,
+      strategiesActive: Math.max(
+        Object.values(strategyCounts).filter((count) => Number(count) > 0).length,
+        activeStrategiesFromRows,
+      ),
       dataHealth: buildHealthLabel(cockpit?.apiHealth, cockpit?.redFlags),
     };
-  }, [cockpit, positions.length, trades.length]);
+  }, [cockpit, positions, trades]);
 
   const activityRows = useMemo(
     () => buildActivityRows(events, cockpit?.redFlags, trades, cockpit?.apiHealth, cockpit?.algoMonitor?.lastAlgoAction),

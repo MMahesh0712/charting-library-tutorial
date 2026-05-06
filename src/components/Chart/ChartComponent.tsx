@@ -117,6 +117,7 @@ interface ChartComponentProps {
     onOpenTradingPanel?: (action?: string, price?: number, orderType?: string, isModal?: boolean) => void;
     onIndicatorMoveUp?: (id: string) => void;
     onOpenIndicatorAlert?: (indicatorId?: string) => void;
+    strategySignalFilter?: string;
     /** TSK-CS-012: Unique chart identity for per-chart drawings persistence */
     chartId?: string;
 }
@@ -222,6 +223,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
     onOpenTradingPanel, // Callback to open trading panel
     onIndicatorMoveUp, // New prop for moving indicators
     onOpenIndicatorAlert, // Callback to open indicator alert dialog
+    strategySignalFilter = 'ALL',
     chartId, // TSK-CS-012: unique chart identity for drawings
 }, ref) => {
     // Get authentication status
@@ -3669,7 +3671,11 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
         // resolve to their underlying alias (NIFTY) for signal lookup.
         const currentSym = getSignalIndex(symbolRef.current || symbol || '').toUpperCase();
 
-        const signals = getSignalsForIndex(currentSym);
+        const allSignals = getSignalsForIndex(currentSym);
+        const selectedStrategy = String(strategySignalFilter || 'ALL').toUpperCase();
+        const signals = selectedStrategy === 'ALL'
+            ? allSignals
+            : allSignals.filter(signal => String(signal.strategy || '').toUpperCase() === selectedStrategy);
 
         // Lazy-create TradeVisualizer
         if (!tradeVisualizerRef.current) {
@@ -3695,7 +3701,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
         if (dataRef.current && dataRef.current.length > 0) {
             updateIndicators(dataRef.current, indicatorsRef.current);
         }
-    }, [symbol, getSignalsForIndex, updateIndicators]);
+    }, [symbol, getSignalsForIndex, updateIndicators, strategySignalFilter]);
 
     // ========== OI LINES EFFECT (Max Call OI, Max Put OI, Max Pain) ==========
     useEffect(() => {

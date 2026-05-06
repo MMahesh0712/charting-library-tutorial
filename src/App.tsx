@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import Layout from './components/Layout/Layout';
-import Topbar from './components/Topbar/Topbar';
+import Topbar, { type SignalStrategyFilter } from './components/Topbar/Topbar';
 import DrawingToolbar from './components/Toolbar/DrawingToolbar';
 import DrawingPropertiesPanel from './components/Toolbar/DrawingPropertiesPanel';
 import ChartComponent from './components/Chart/ChartComponent';
@@ -47,6 +47,14 @@ import { getChartEngine, getTradingViewLibraryPath } from './services/tradingVie
 import { getDefaultHostUrl, getDefaultWebSocketHost } from './services/api/config';
 
 import AccountPanel from './components/AccountPanel/AccountPanel';
+
+const SIGNAL_FILTER_STORAGE_KEY = 'opendhan:chart-signal-strategy-filter';
+const DEFAULT_SIGNAL_STRATEGY_FILTER: SignalStrategyFilter = 'ALL';
+const SIGNAL_STRATEGY_FILTERS: SignalStrategyFilter[] = ['ALL', 'BET', 'GAP_PULSE', 'STRUCTURE_PULSE', 'DNX_SEZ', 'GTL'];
+
+function isSignalStrategyFilter(value: string): value is SignalStrategyFilter {
+  return SIGNAL_STRATEGY_FILTERS.includes(value as SignalStrategyFilter);
+}
 
 // Lazy load additional heavy components
 const ShortcutsSettings = lazy(() => import('./components/ShortcutsSettings/ShortcutsSettings'));
@@ -196,7 +204,15 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   }, [layout, charts]);
 
   const [chartType, setChartType] = useState('candlestick');
+  const [signalStrategyFilter, setSignalStrategyFilter] = useState<SignalStrategyFilter>(() => {
+    const saved = getString(SIGNAL_FILTER_STORAGE_KEY, DEFAULT_SIGNAL_STRATEGY_FILTER);
+    return isSignalStrategyFilter(saved) ? saved : DEFAULT_SIGNAL_STRATEGY_FILTER;
+  });
   // Modal states (isSearchOpen, searchMode, etc.) are now from UIContext above
+
+  useEffect(() => {
+    set(SIGNAL_FILTER_STORAGE_KEY, signalStrategyFilter);
+  }, [signalStrategyFilter]);
 
   // Compare options dialog state (unique to App.jsx)
   const [compareOptionsVisible, setCompareOptionsVisible] = useState(false);
@@ -1303,6 +1319,8 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
             onHeatmapClick={() => setIsSectorHeatmapOpen(true)}
             onPineEditorClick={() => setShowPineEditor(prev => !prev)}
             isPineEditorOpen={showPineEditor}
+            signalStrategyFilter={signalStrategyFilter}
+            onSignalStrategyFilterChange={setSignalStrategyFilter}
           />
         }
         leftToolbar={
@@ -1449,6 +1467,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
             onOpenIndicatorAlert={handleOpenIndicatorAlert}
             onIndicatorMoveUp={handleIndicatorMoveUp}
             chartAppearance={chartAppearance}
+            strategySignalFilter={signalStrategyFilter}
             onOpenOptionChain={handleOpenOptionChainForSymbol}
             oiLines={oiLines}
             showOILines={showOILines}
